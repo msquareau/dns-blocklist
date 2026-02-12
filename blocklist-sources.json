@@ -1,0 +1,245 @@
+{
+  "version": 1,
+  "description": "Category to HaGeZi blocklist URL mappings for pre-compilation",
+  "baseUrls": {
+    "domains": "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/domains",
+    "adblock": "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock",
+    "hosts": "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/hosts",
+    "wildcard": "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard",
+    "blocklistproject": "https://blocklistproject.github.io/Lists/alt-version"
+  },
+  "sources": [
+    {
+      "category": "adsTrackersLight",
+      "categoryIndex": 0,
+      "file": "light.txt",
+      "baseUrl": "domains",
+      "format": "domains",
+      "displayName": "HaGeZi Light"
+    },
+    {
+      "category": "adsTrackersNormal",
+      "categoryIndex": 1,
+      "file": "multi.txt",
+      "baseUrl": "domains",
+      "format": "domains",
+      "displayName": "HaGeZi Multi"
+    },
+    {
+      "category": "adsTrackersPro",
+      "categoryIndex": 2,
+      "file": "pro.txt",
+      "baseUrl": "domains",
+      "format": "domains",
+      "displayName": "HaGeZi Pro"
+    },
+    {
+      "category": "adsTrackersProPlus",
+      "categoryIndex": 3,
+      "file": "pro.plus.txt",
+      "baseUrl": "domains",
+      "format": "domains",
+      "displayName": "HaGeZi Pro++"
+    },
+    {
+      "category": "adsTrackersUltimate",
+      "categoryIndex": 4,
+      "file": "ultimate.txt",
+      "baseUrl": "domains",
+      "format": "domains",
+      "displayName": "HaGeZi Ultimate"
+    },
+    {
+      "category": "threatIntelligence",
+      "categoryIndex": 5,
+      "file": "tif.txt",
+      "baseUrl": "domains",
+      "format": "domains",
+      "displayName": "HaGeZi Threat Intelligence"
+    },
+    {
+      "category": "newlyRegisteredDomains",
+      "categoryIndex": 6,
+      "file": "nrd7.txt",
+      "baseUrl": "domains",
+      "format": "domains",
+      "displayName": "HaGeZi NRD (7 days)"
+    },
+    {
+      "category": "dgaDetection",
+      "categoryIndex": 7,
+      "file": "dga7.txt",
+      "baseUrl": "domains",
+      "format": "domains",
+      "displayName": "HaGeZi DGA (7 days)"
+    },
+    {
+      "category": "malwarePhishing",
+      "categoryIndex": 8,
+      "file": "fake.txt",
+      "baseUrl": "adblock",
+      "format": "adblock",
+      "displayName": "HaGeZi Fake/Phishing"
+    },
+    {
+      "category": "adultContent",
+      "categoryIndex": 9,
+      "file": "nsfw.txt",
+      "baseUrl": "adblock",
+      "format": "adblock",
+      "displayName": "HaGeZi NSFW"
+    },
+    {
+      "category": "gambling",
+      "categoryIndex": 10,
+      "file": "gambling.txt",
+      "baseUrl": "adblock",
+      "format": "adblock",
+      "displayName": "HaGeZi Gambling"
+    },
+    {
+      "category": "piracy",
+      "categoryIndex": 11,
+      "file": "anti.piracy.txt",
+      "baseUrl": "adblock",
+      "format": "adblock",
+      "displayName": "HaGeZi Anti-Piracy"
+    },
+    {
+      "category": "socialNetworksAll",
+      "categoryIndex": 12,
+      "file": "social.txt",
+      "baseUrl": "adblock",
+      "format": "adblock",
+      "displayName": "HaGeZi Social Media"
+    },
+    {
+      "category": "appleTracker",
+      "categoryIndex": 13,
+      "file": "native.apple.txt",
+      "baseUrl": "domains",
+      "format": "domains",
+      "displayName": "HaGeZi Apple Tracking"
+    },
+    {
+      "category": "amazonTracker",
+      "categoryIndex": 14,
+      "file": "native.amazon.txt",
+      "baseUrl": "domains",
+      "format": "domains",
+      "displayName": "HaGeZi Amazon Tracking"
+    },
+    {
+      "category": "microsoftTracker",
+      "categoryIndex": 15,
+      "file": "native.winoffice.txt",
+      "baseUrl": "domains",
+      "format": "domains",
+      "displayName": "HaGeZi Microsoft Tracking"
+    },
+    {
+      "category": "samsungTracker",
+      "categoryIndex": 16,
+      "file": "native.samsung.txt",
+      "baseUrl": "domains",
+      "format": "domains",
+      "displayName": "HaGeZi Samsung Tracking"
+    },
+    {
+      "category": "xiaomiTracker",
+      "categoryIndex": 17,
+      "file": "native.xiaomi.txt",
+      "baseUrl": "domains",
+      "format": "domains",
+      "displayName": "HaGeZi Xiaomi Tracking"
+    },
+    {
+      "category": "huaweiTracker",
+      "categoryIndex": 18,
+      "file": "native.huawei.txt",
+      "baseUrl": "domains",
+      "format": "domains",
+      "displayName": "HaGeZi Huawei Tracking"
+    },
+    {
+      "category": "lgTracker",
+      "categoryIndex": 19,
+      "file": "native.lgwebos.txt",
+      "baseUrl": "domains",
+      "format": "domains",
+      "displayName": "HaGeZi LG Tracking"
+    },
+    {
+      "category": "rokuTracker",
+      "categoryIndex": 20,
+      "file": "native.roku.txt",
+      "baseUrl": "domains",
+      "format": "domains",
+      "displayName": "HaGeZi Roku Tracking"
+    },
+    {
+      "category": "tiktok",
+      "categoryIndex": 21,
+      "file": "native.tiktok.txt",
+      "baseUrl": "domains",
+      "format": "domains",
+      "displayName": "HaGeZi TikTok"
+    },
+    {
+      "category": "tiktokExtended",
+      "categoryIndex": 22,
+      "file": "native.tiktok.extended.txt",
+      "baseUrl": "domains",
+      "format": "domains",
+      "displayName": "HaGeZi TikTok Extended"
+    },
+    {
+      "category": "bypassPrevention",
+      "categoryIndex": 23,
+      "file": "doh-vpn-proxy-bypass.txt",
+      "baseUrl": "adblock",
+      "format": "adblock",
+      "displayName": "HaGeZi DoH/VPN/Proxy Bypass"
+    },
+    {
+      "category": "dohOnly",
+      "categoryIndex": 24,
+      "file": "doh.txt",
+      "baseUrl": "domains",
+      "format": "domains",
+      "displayName": "HaGeZi DoH Only"
+    },
+    {
+      "category": "dynamicDNS",
+      "categoryIndex": 25,
+      "file": "dyndns.txt",
+      "baseUrl": "adblock",
+      "format": "adblock",
+      "displayName": "HaGeZi Dynamic DNS"
+    },
+    {
+      "category": "urlShorteners",
+      "categoryIndex": 26,
+      "file": "urlshortener.txt",
+      "baseUrl": "adblock",
+      "format": "adblock",
+      "displayName": "HaGeZi URL Shorteners"
+    },
+    {
+      "category": "popUpAds",
+      "categoryIndex": 27,
+      "file": "popupads.txt",
+      "baseUrl": "adblock",
+      "format": "adblock",
+      "displayName": "HaGeZi Pop-up Ads"
+    },
+    {
+      "category": "drugs",
+      "categoryIndex": 28,
+      "file": "drugs-nl.txt",
+      "baseUrl": "blocklistproject",
+      "format": "domains",
+      "displayName": "Block List Project Drugs"
+    }
+  ]
+}
