@@ -34,10 +34,6 @@ The test suite includes:
 4. Serializes to SDBL v3 binary format for fast domain lookup
 5. Generates metadata JSON with SHA-256 checksums and domain statistics
 
-## Binary Format
-
-See [format/SDBL-V3-FORMAT.md](format/SDBL-V3-FORMAT.md) for the full SDBL v3 binary format specification.
-
 ## Third-Party Sources and Licensing
 
 This tool aggregates domain lists from the following open-source projects. The compiled binary output incorporates data from these sources and is subject to the terms of their respective licenses.
