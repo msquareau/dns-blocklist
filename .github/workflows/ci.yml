@@ -1,12 +1,13 @@
-name: CI
+name: Checks
 
 on:
   push:
+    branches-ignore: [main]
   pull_request:
     branches: [main]
 
 jobs:
-  ci:
+  checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
