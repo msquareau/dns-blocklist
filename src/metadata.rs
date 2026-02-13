@@ -55,7 +55,6 @@ pub fn generate_metadata(
 
     let value = json!({
         "version": version,
-        "buildId": build_id,
         "filename": filename,
         "size": binary_size,
         "sha256": sha256,
@@ -172,7 +171,6 @@ mod tests {
 
         // Verify it's valid JSON
         let parsed: serde_json::Value = serde_json::from_str(&meta).unwrap();
-        assert_eq!(parsed["buildId"], "test123");
         assert_eq!(parsed["filename"], "blocklist-test123.bin.gz");
         assert_eq!(parsed["size"], 1000);
         assert_eq!(parsed["sha256"], "abc123");
