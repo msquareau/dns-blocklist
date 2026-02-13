@@ -34,6 +34,72 @@ The test suite includes:
 4. Serializes to SDBL v3 binary format for fast domain lookup
 5. Generates metadata JSON with SHA-256 checksums and domain statistics
 
+## Configuring Blocklist Sources
+
+All blocklist sources are defined in [`blocklist-sources.json`](blocklist-sources.json). You can add, remove, or modify sources by editing this file.
+
+### File Structure
+
+```json
+{
+  "version": 1,
+  "description": "Human-readable description of this config",
+  "baseUrls": {
+    "domains": "https://example.com/domains",
+    "adblock": "https://example.com/adblock"
+  },
+  "sources": [
+    {
+      "category": "adsTrackers",
+      "categoryIndex": 0,
+      "file": "ads.txt",
+      "baseUrl": "domains",
+      "format": "domains",
+      "displayName": "Ad Trackers List"
+    }
+  ]
+}
+```
+
+### Fields
+
+**Top-level:**
+
+| Field | Description |
+|-------|-------------|
+| `version` | Config schema version (currently `1`) |
+| `description` | Human-readable description |
+| `baseUrls` | Named URL prefixes referenced by sources |
+| `sources` | Array of blocklist source entries |
+
+**Each source entry:**
+
+| Field | Description |
+|-------|-------------|
+| `category` | Unique category identifier (camelCase) |
+| `categoryIndex` | Unique integer `0–255` — used as the bit position in the binary category bitmap |
+| `file` | Filename appended to the base URL to form the download URL |
+| `baseUrl` | Key into `baseUrls` — the download URL is `baseUrls[baseUrl]/file` |
+| `format` | List format: `domains`, `hosts`, or `adblock` (see below) |
+| `displayName` | Human-readable name shown in build output |
+
+### Supported Formats
+
+| Format | Description | Example line |
+|--------|-------------|--------------|
+| `domains` | Plain domain list, one per line. Supports `*.` and `.` wildcard prefixes. | `example.com` |
+| `hosts` | Hosts file format (`0.0.0.0` or `127.0.0.1` followed by a domain). | `0.0.0.0 example.com` |
+| `adblock` | Adblock filter syntax. Only `\|\|domain^` rules are used; rules with `$`, `/`, or `*` are skipped. | `\|\|example.com^` |
+
+### Adding a New Source
+
+1. If the source uses a new base URL, add it to `baseUrls`.
+2. Add a new entry to `sources` with a unique `category` and `categoryIndex`.
+3. Run the compiler to verify the source downloads and parses correctly:
+   ```bash
+   cargo run -- --output ./output
+   ```
+
 ## Third-Party Sources and Licensing
 
 This tool aggregates domain lists from the following open-source projects. The compiled binary output incorporates data from these sources and is subject to the terms of their respective licenses.
