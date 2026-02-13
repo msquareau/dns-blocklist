@@ -119,7 +119,7 @@ Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for gui
 
 ## License
 
-Copyright (C) 2026 M-SQAURE Pty Ltd, Australia
+Copyright (C) 2026 M-SQUARE Pty Ltd, Australia
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 3 of the License.
 
