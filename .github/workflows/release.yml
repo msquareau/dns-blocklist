@@ -40,6 +40,12 @@ jobs:
       - name: Build release
         run: cargo build --release
 
+      - name: Install cargo-about
+        run: cargo install --locked cargo-about
+
+      - name: Generate third-party notices
+        run: ./scripts/generate-third-party-notices.sh
+
       - name: Run compiler
         run: ./target/release/dns-blocklist-compiler --output output/
 
@@ -92,3 +98,4 @@ jobs:
           files: |
             output/blocklist.bin.gz
             output/blocklist.json
+            THIRD-PARTY-NOTICES.md

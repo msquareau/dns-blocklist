@@ -1,0 +1,24 @@
+{{! Handlebars template for cargo-about — generates Markdown grouped by license. }}
+{{#each licenses}}
+{{#if first_of_kind}}
+---
+
+### {{name}} (`{{id}}`)
+
+{{/if}}
+{{#each used_by}}
+- **{{crate.name}} {{crate.version}}**{{#if crate.repository}} — [repository]({{crate.repository}}){{/if}}
+{{/each}}
+{{#if first_of_kind}}
+
+<details>
+<summary>Full license text</summary>
+
+```
+{{{text}}}
+```
+
+</details>
+{{/if}}
+
+{{/each}}
