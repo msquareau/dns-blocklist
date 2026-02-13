@@ -15,8 +15,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -43,17 +41,12 @@ jobs:
       - name: Run compiler
         run: ./target/release/dns-blocklist-compiler --output output/
 
-      - name: Generate date-based tag
+      - name: Extract build ID for tag
         id: tag
         run: |
-          TAG=$(date -u +%Y-%m-%d)
-          SUFFIX=1
-          while git rev-parse "refs/tags/$TAG" >/dev/null 2>&1; do
-            SUFFIX=$((SUFFIX + 1))
-            TAG="$(date -u +%Y-%m-%d)-$SUFFIX"
-          done
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "Generated tag: $TAG"
+          BUILD_ID=$(python3 -c "import json; print(json.load(open('output/blocklist.json'))['buildId'])")
+          echo "tag=$BUILD_ID" >> "$GITHUB_OUTPUT"
+          echo "Build ID tag: $BUILD_ID"
 
       - name: Generate release body
         id: body
