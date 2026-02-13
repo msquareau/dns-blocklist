@@ -6,10 +6,10 @@ Rust CLI tool that downloads DNS blocklists from popular open-source upstream so
 
 ```bash
 # Requirements: Rust 1.75+
-git clone https://github.com/msquareau/alpaca-blocklists.git
-cd alpaca-blocklists
+git clone https://github.com/msquareau/dns-blocklist.git
+cd dns-blocklist
 cargo build --release
-./target/release/alpaca-blocklists --output ./output
+./target/release/dns-blocklist-compiler --output ./output
 # Output: output/blocklist.bin, output/blocklist.bin.gz, output/blocklist.json
 ```
 
@@ -53,7 +53,7 @@ Because the majority of upstream data is licensed under the GNU General Public L
 
 ## License
 
-Copyright (C) 2025 msquare AU Pty Ltd
+Copyright (C) 2025 M-SQAURE Pty Ltd, Australia
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 3 of the License.
 
