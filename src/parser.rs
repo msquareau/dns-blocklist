@@ -301,9 +301,11 @@ mod tests {
         let (exact, _) = parse_blocklist(content, "hosts", 0, &mut store);
         assert_eq!(exact, 1);
         assert!(store.exact_domains.contains_key("tracker.example.com"));
-        assert!(!store
-            .exact_domains
-            .contains_key("tracker.example.com#comment"));
+        assert!(
+            !store
+                .exact_domains
+                .contains_key("tracker.example.com#comment")
+        );
     }
 
     #[test]

@@ -1,7 +1,7 @@
 use dns_blocklist_compiler::{binary, config, downloader, metadata, parser};
 
-use flate2::write::GzEncoder;
 use flate2::Compression;
+use flate2::write::GzEncoder;
 use sha2::{Digest, Sha256};
 use std::io::Write;
 use std::path::PathBuf;

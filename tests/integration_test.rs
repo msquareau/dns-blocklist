@@ -282,9 +282,9 @@ fn test_10k_domains_stress() {
 // ---------------------------------------------------------------------------
 #[test]
 fn test_gzip_round_trip() {
+    use flate2::Compression;
     use flate2::read::GzDecoder;
     use flate2::write::GzEncoder;
-    use flate2::Compression;
     use std::io::{Read, Write};
 
     let exact = test_data::generate_blocked_domains(100, 0);

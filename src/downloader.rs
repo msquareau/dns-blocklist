@@ -2,6 +2,7 @@ use crate::config::{SourceEntry, SourcesConfig};
 use rayon::prelude::*;
 use std::io::Read;
 use std::time::Duration;
+use ureq::Agent;
 
 /// Maximum response body size (100 MB). Prevents OOM from malicious upstreams.
 const MAX_RESPONSE_BYTES: u64 = 100 * 1024 * 1024;
@@ -11,9 +12,17 @@ pub struct DownloadResult {
     pub content: Option<String>,
 }
 
+fn make_agent() -> Agent {
+    Agent::config_builder()
+        .timeout_global(Some(Duration::from_secs(120)))
+        .build()
+        .into()
+}
+
 pub fn download_all(config: &SourcesConfig) -> Vec<DownloadResult> {
     let sources: Vec<_> = config.sources.clone();
     let total = sources.len();
+    let agent = make_agent();
 
     sources
         .into_par_iter()
@@ -44,11 +53,12 @@ pub fn download_all(config: &SourcesConfig) -> Vec<DownloadResult> {
                 source.display_name
             );
 
-            let content = match ureq::get(&url).timeout(Duration::from_secs(120)).call() {
-                Ok(response) => {
+            let content = match agent.get(&url).call() {
+                Ok(mut response) => {
                     let mut bytes = Vec::new();
                     match response
-                        .into_reader()
+                        .body_mut()
+                        .as_reader()
                         .take(MAX_RESPONSE_BYTES)
                         .read_to_end(&mut bytes)
                     {

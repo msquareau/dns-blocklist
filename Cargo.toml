@@ -1,10 +1,10 @@
 [package]
 name = "dns-blocklist-compiler"
 version = "0.1.0"
-edition = "2021"
-rust-version = "1.75"
+edition = "2024"
+rust-version = "1.85"
 description = "Compile DNS blocklists into SDBL v3 binary format"
-license = "GPL-3.0"
+license = "GPL-3.0-only"
 
 [lib]
 name = "dns_blocklist_compiler"
@@ -15,7 +15,7 @@ name = "dns-blocklist-compiler"
 path = "src/main.rs"
 
 [dependencies]
-ureq = "2"
+ureq = "3"
 rayon = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
