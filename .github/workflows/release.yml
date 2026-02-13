@@ -1,0 +1,94 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy -- -D warnings
+
+      - name: Run tests
+        run: cargo test
+
+      - name: Run integration tests (real downloads)
+        run: cargo test -- --ignored
+
+      - name: Build release
+        run: cargo build --release
+
+      - name: Run compiler
+        run: ./target/release/dns-blocklist-compiler --output output/
+
+      - name: Generate date-based tag
+        id: tag
+        run: |
+          TAG=$(date -u +%Y-%m-%d)
+          SUFFIX=1
+          while git rev-parse "refs/tags/$TAG" >/dev/null 2>&1; do
+            SUFFIX=$((SUFFIX + 1))
+            TAG="$(date -u +%Y-%m-%d)-$SUFFIX"
+          done
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Generated tag: $TAG"
+
+      - name: Generate release body
+        id: body
+        run: |
+          BODY=$(python3 -c "
+          import json
+          with open('output/blocklist.json') as f:
+              meta = json.load(f)
+          lines = []
+          lines.append(f'**Version:** {meta.get(\"version\", \"unknown\")}')
+          lines.append(f'**Total domains:** {meta.get(\"domainCount\", 0):,}')
+          lines.append(f'**Exact domains:** {meta.get(\"exactCount\", 0):,}')
+          lines.append(f'**Wildcard domains:** {meta.get(\"wildcardCount\", 0):,}')
+          lines.append(f'**Categories:** {meta.get(\"categoryCount\", 0)}')
+          lines.append('')
+          stats = meta.get('categoryStats', {})
+          if stats:
+              lines.append('### Category Breakdown')
+              for name, counts in sorted(stats.items()):
+                  total = counts.get('exact', 0) + counts.get('wildcard', 0)
+                  lines.append(f'- **{name}**: {total:,} domains ({counts.get(\"exact\", 0):,} exact, {counts.get(\"wildcard\", 0):,} wildcard)')
+          print('\n'.join(lines))
+          ")
+          {
+            echo 'body<<EOF'
+            echo "$BODY"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: Blocklist ${{ steps.tag.outputs.tag }}
+          body: ${{ steps.body.outputs.body }}
+          files: |
+            output/blocklist.bin.gz
+            output/blocklist.json
