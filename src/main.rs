@@ -1,9 +1,4 @@
-mod binary;
-mod config;
-mod downloader;
-mod metadata;
-mod parser;
-mod trie;
+use dns_blocklist_compiler::{binary, config, downloader, metadata, parser};
 
 use flate2::write::GzEncoder;
 use flate2::Compression;
@@ -45,7 +40,7 @@ fn main() {
     let results = downloader::download_all(&config);
 
     let mut store = parser::DomainStore::new();
-    let mut category_stats: Vec<(String, usize, usize)> = Vec::new();
+    let mut category_stats: Vec<metadata::CategoryStat> = Vec::new();
     let mut total_downloaded = 0;
     let mut total_failed = 0;
 
@@ -62,7 +57,11 @@ fn main() {
                     "  {} — {} exact, {} wildcard",
                     result.source.display_name, exact, wildcard
                 );
-                category_stats.push((result.source.category.clone(), exact, wildcard));
+                category_stats.push(metadata::CategoryStat {
+                    name: result.source.category.clone(),
+                    exact,
+                    wildcard,
+                });
                 total_downloaded += 1;
             }
             None => {
@@ -136,8 +135,8 @@ fn main() {
     }
     println!("Written compressed blocklist.bin.gz");
 
-    // Metadata
-    let category_names: Vec<String> = config.sources.iter().map(|s| s.category.clone()).collect();
+    // Metadata (reuse categories vec for category names)
+    let category_names: Vec<String> = categories.iter().map(|(name, _)| name.clone()).collect();
     let metadata_json = metadata::generate_metadata(
         &build_id,
         binary_data.len(),

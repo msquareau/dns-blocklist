@@ -1,25 +1,39 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 pub struct DomainStore {
-    pub exact_domains: HashMap<String, u32>,
-    pub wildcard_suffixes: HashMap<String, u32>,
+    pub exact_domains: BTreeMap<String, u32>,
+    pub wildcard_suffixes: BTreeMap<String, u32>,
+}
+
+impl Default for DomainStore {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl DomainStore {
     pub fn new() -> Self {
         Self {
-            exact_domains: HashMap::new(),
-            wildcard_suffixes: HashMap::new(),
+            exact_domains: BTreeMap::new(),
+            wildcard_suffixes: BTreeMap::new(),
         }
     }
 
     pub fn add_exact(&mut self, domain: &str, category_index: u8) {
-        let bitmap: u32 = 1 << category_index;
+        assert!(
+            category_index < 32,
+            "category_index must be < 32, got {category_index}"
+        );
+        let bitmap: u32 = 1u32 << category_index;
         *self.exact_domains.entry(domain.to_string()).or_insert(0) |= bitmap;
     }
 
     pub fn add_wildcard(&mut self, suffix: &str, category_index: u8) {
-        let bitmap: u32 = 1 << category_index;
+        assert!(
+            category_index < 32,
+            "category_index must be < 32, got {category_index}"
+        );
+        let bitmap: u32 = 1u32 << category_index;
         *self
             .wildcard_suffixes
             .entry(suffix.to_string())
@@ -45,46 +59,51 @@ pub fn parse_blocklist(
 
         let mut is_wildcard = false;
 
-        let dom = match format {
+        let dom: String = match format {
             "hosts" => {
-                let parts: Vec<&str> = trimmed.split_whitespace().collect();
-                if parts.len() < 2 {
-                    continue;
-                }
-                let ip = parts[0];
+                let mut parts = trimmed.split_whitespace();
+                let ip = match parts.next() {
+                    Some(ip) => ip,
+                    None => continue,
+                };
                 if ip != "0.0.0.0" && ip != "127.0.0.1" {
                     continue;
                 }
-                parts[1].to_lowercase()
+                let domain = match parts.next() {
+                    Some(d) => d,
+                    None => continue,
+                };
+                // Strip inline comment glued to domain (e.g. "tracker.com#comment")
+                let domain = domain.split('#').next().unwrap_or(domain);
+                domain.to_lowercase()
             }
             "domains" => {
-                let mut d = trimmed.to_lowercase();
-                if d.starts_with("*.") {
-                    d = format!(".{}", &d[2..]);
+                let s = trimmed;
+                let s = if let Some(rest) = s.strip_prefix("*.") {
                     is_wildcard = true;
-                } else if d.starts_with('.') {
+                    rest
+                } else if let Some(rest) = s.strip_prefix('.') {
                     is_wildcard = true;
-                }
-                d
+                    rest
+                } else {
+                    s
+                };
+                s.to_lowercase()
             }
             "adblock" => {
-                let mut d = trimmed.to_string();
-                if d.starts_with("||") {
-                    d = d[2..].to_string();
-                }
-                if d.ends_with('^') {
-                    d.pop();
-                }
-                if d.contains('$') || d.contains('/') || d.contains('*') {
+                let s = trimmed;
+                let s = s.strip_prefix("||").unwrap_or(s);
+                let s = s.strip_suffix('^').unwrap_or(s);
+                if s.contains('$') || s.contains('/') || s.contains('*') {
                     continue;
                 }
-                d.to_lowercase()
+                s.to_lowercase()
             }
             _ => trimmed.to_lowercase(),
         };
 
         // Clean up: trim leading/trailing '.' and '*'
-        let dom = dom.trim_matches(|c| c == '.' || c == '*').to_string();
+        let dom = dom.trim_matches(|c: char| c == '.' || c == '*');
 
         if dom.is_empty()
             || dom == "localhost"
@@ -95,15 +114,18 @@ pub fn parse_blocklist(
             continue;
         }
 
-        if !is_valid_domain(&dom) {
+        if !is_valid_domain(dom) {
             continue;
         }
 
         if is_wildcard {
-            store.add_wildcard(&format!(".{dom}"), category_index);
+            let mut suffix = String::with_capacity(dom.len() + 1);
+            suffix.push('.');
+            suffix.push_str(dom);
+            store.add_wildcard(&suffix, category_index);
             wildcard_count += 1;
         } else {
-            store.add_exact(&dom, category_index);
+            store.add_exact(dom, category_index);
             exact_count += 1;
         }
     }
@@ -121,6 +143,19 @@ fn is_valid_domain(domain: &str) -> bool {
     if parts.len() == 4 {
         let all_numeric = parts.iter().all(|part| part.parse::<u8>().is_ok());
         if all_numeric {
+            return false;
+        }
+    }
+
+    // Reject domains with invalid characters
+    for label in &parts {
+        if label.is_empty() {
+            return false;
+        }
+        if !label
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+        {
             return false;
         }
     }
@@ -192,5 +227,115 @@ mod tests {
         let (exact, wildcard) = parse_blocklist(content, "domains", 0, &mut store);
         assert_eq!(exact, 0);
         assert_eq!(wildcard, 0);
+    }
+
+    #[test]
+    fn test_parse_case_insensitive() {
+        let content = "EXAMPLE.COM\nexample.com\nExample.Com\n";
+        let mut store = DomainStore::new();
+        let (exact, _) = parse_blocklist(content, "domains", 0, &mut store);
+        // All three lines should merge into one entry (lowercased)
+        assert_eq!(exact, 3); // parse counts lines processed, not unique
+        assert_eq!(store.exact_domains.len(), 1);
+        assert!(store.exact_domains.contains_key("example.com"));
+    }
+
+    #[test]
+    fn test_parse_empty_and_comment_only() {
+        let content = "";
+        let mut store = DomainStore::new();
+        let (exact, wildcard) = parse_blocklist(content, "domains", 0, &mut store);
+        assert_eq!(exact, 0);
+        assert_eq!(wildcard, 0);
+
+        let comment_only = "# this is a comment\n! also a comment\n   \n";
+        let (exact2, wildcard2) = parse_blocklist(comment_only, "domains", 0, &mut store);
+        assert_eq!(exact2, 0);
+        assert_eq!(wildcard2, 0);
+        assert!(store.exact_domains.is_empty());
+    }
+
+    #[test]
+    fn test_parse_domain_too_long() {
+        // 254 chars total (over the 253 limit)
+        let long_label = "a".repeat(245);
+        let long_domain = format!("{}.example.com", long_label);
+        assert!(long_domain.len() > 253);
+
+        let mut store = DomainStore::new();
+        let (exact, _) = parse_blocklist(&long_domain, "domains", 0, &mut store);
+        assert_eq!(exact, 0, "domain over 253 chars should be rejected");
+        assert!(store.exact_domains.is_empty());
+    }
+
+    #[test]
+    fn test_hosts_format_with_comments_and_tabs() {
+        let content = "\
+0.0.0.0\tads.example.com\n\
+127.0.0.1\ttracker.example.com\t# inline comment\n\
+0.0.0.0 tabbed.example.com # another comment\n\
+::1 ipv6only.example.com\n\
+# full line comment\n\
+0.0.0.0 valid.example.org\n";
+
+        let mut store = DomainStore::new();
+        let (exact, wildcard) = parse_blocklist(content, "hosts", 5, &mut store);
+
+        // Tab-separated lines should parse, ::1 should be skipped
+        assert_eq!(wildcard, 0);
+        assert!(store.exact_domains.contains_key("ads.example.com"));
+        assert!(store.exact_domains.contains_key("tracker.example.com"));
+        assert!(store.exact_domains.contains_key("tabbed.example.com"));
+        assert!(store.exact_domains.contains_key("valid.example.org"));
+        // ::1 is neither 0.0.0.0 nor 127.0.0.1, so it should be skipped
+        assert!(!store.exact_domains.contains_key("ipv6only.example.com"));
+        // The inline-comment tokens should not be treated as domains
+        assert!(!store.exact_domains.contains_key("#"));
+        assert_eq!(exact, 4);
+    }
+
+    #[test]
+    fn test_hosts_format_inline_comment_glued() {
+        let content = "0.0.0.0 tracker.example.com#comment\n";
+        let mut store = DomainStore::new();
+        let (exact, _) = parse_blocklist(content, "hosts", 0, &mut store);
+        assert_eq!(exact, 1);
+        assert!(store.exact_domains.contains_key("tracker.example.com"));
+        assert!(!store
+            .exact_domains
+            .contains_key("tracker.example.com#comment"));
+    }
+
+    #[test]
+    fn test_adblock_skip_complex_rules() {
+        let content = "||valid.example.com^\n||has-dollar.com^$third-party\n||has-slash.com/path\n||has-star.com*wild\n||also-valid.org^\n";
+        let mut store = DomainStore::new();
+        let (exact, _) = parse_blocklist(content, "adblock", 0, &mut store);
+        assert_eq!(exact, 2);
+        assert!(store.exact_domains.contains_key("valid.example.com"));
+        assert!(store.exact_domains.contains_key("also-valid.org"));
+        assert!(!store.exact_domains.contains_key("has-dollar.com"));
+        assert!(!store.exact_domains.contains_key("has-slash.com"));
+        assert!(!store.exact_domains.contains_key("has-star.com"));
+    }
+
+    #[test]
+    #[should_panic(expected = "category_index must be < 32")]
+    fn test_category_index_overflow_panics() {
+        let mut store = DomainStore::new();
+        store.add_exact("example.com", 32);
+    }
+
+    #[test]
+    fn test_reject_domains_with_invalid_chars() {
+        let content =
+            "valid.example.com\ninvalid@domain.com\nbad[bracket.com\nok-hyphen.example.org\n";
+        let mut store = DomainStore::new();
+        let (exact, _) = parse_blocklist(content, "domains", 0, &mut store);
+        assert_eq!(exact, 2);
+        assert!(store.exact_domains.contains_key("valid.example.com"));
+        assert!(store.exact_domains.contains_key("ok-hyphen.example.org"));
+        assert!(!store.exact_domains.contains_key("invalid@domain.com"));
+        assert!(!store.exact_domains.contains_key("bad[bracket.com"));
     }
 }

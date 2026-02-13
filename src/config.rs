@@ -55,4 +55,68 @@ mod tests {
         assert_eq!(config.sources[0].category_index, 0);
         assert_eq!(config.base_urls["domains"], "https://example.com");
     }
+
+    #[test]
+    fn test_load_config_file_not_found() {
+        let result = load_config(Path::new("/nonexistent/path/blocklist-sources.json"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_deserialize_multiple_sources() {
+        let json = r#"{
+            "version": 1,
+            "description": "Multi-source test",
+            "baseUrls": {
+                "domains": "https://example.com/domains",
+                "adblock": "https://example.com/adblock"
+            },
+            "sources": [
+                {
+                    "category": "ads",
+                    "categoryIndex": 0,
+                    "file": "ads.txt",
+                    "baseUrl": "domains",
+                    "format": "domains",
+                    "displayName": "Ads List"
+                },
+                {
+                    "category": "trackers",
+                    "categoryIndex": 1,
+                    "file": "trackers.txt",
+                    "baseUrl": "domains",
+                    "format": "domains",
+                    "displayName": "Tracker List"
+                },
+                {
+                    "category": "malware",
+                    "categoryIndex": 2,
+                    "file": "malware.txt",
+                    "baseUrl": "adblock",
+                    "format": "adblock",
+                    "displayName": "Malware List"
+                }
+            ]
+        }"#;
+        let config: SourcesConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.sources.len(), 3);
+        assert_eq!(config.base_urls.len(), 2);
+        assert_eq!(config.sources[0].category, "ads");
+        assert_eq!(config.sources[1].format, "domains");
+        assert_eq!(config.sources[2].base_url, "adblock");
+        assert_eq!(config.sources[2].format, "adblock");
+    }
+
+    #[test]
+    fn test_deserialize_empty_sources() {
+        let json = r#"{
+            "version": 1,
+            "description": "Empty",
+            "baseUrls": {},
+            "sources": []
+        }"#;
+        let config: SourcesConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.sources.len(), 0);
+        assert_eq!(config.base_urls.len(), 0);
+    }
 }

@@ -6,6 +6,10 @@ rust-version = "1.75"
 description = "Compile DNS blocklists into SDBL v3 binary format"
 license = "GPL-3.0"
 
+[lib]
+name = "dns_blocklist_compiler"
+path = "src/lib.rs"
+
 [[bin]]
 name = "dns-blocklist-compiler"
 path = "src/main.rs"

@@ -1,4 +1,11 @@
+use serde_json::json;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+pub struct CategoryStat {
+    pub name: String,
+    pub exact: usize,
+    pub wildcard: usize,
+}
 
 pub fn generate_build_id() -> String {
     let timestamp = SystemTime::now()
@@ -32,41 +39,36 @@ pub fn generate_metadata(
     exact_count: usize,
     wildcard_count: usize,
     categories: &[String],
-    category_stats: &[(String, usize, usize)],
+    category_stats: &[CategoryStat],
 ) -> String {
     let now = chrono_like_now();
     let version = date_version();
     let filename = format!("blocklist-{build_id}.bin.gz");
 
-    let categories_json: Vec<String> = categories.iter().map(|c| format!("\"{c}\"")).collect();
-
-    let mut stats_entries = Vec::new();
-    for (category, exact, wildcard) in category_stats {
-        stats_entries.push(format!(
-            "      \"{category}\": {{\"exact\": {exact}, \"wildcard\": {wildcard}}}"
-        ));
+    let mut stats_map = serde_json::Map::new();
+    for stat in category_stats {
+        stats_map.insert(
+            stat.name.clone(),
+            json!({"exact": stat.exact, "wildcard": stat.wildcard}),
+        );
     }
-    let stats_json = format!("{{\n{}\n    }}", stats_entries.join(",\n"));
 
-    format!(
-        r#"{{
-  "version": "{version}",
-  "filename": "{filename}",
-  "size": {binary_size},
-  "sha256": "{sha256}",
-  "domainCount": {domain_count},
-  "exactCount": {exact_count},
-  "wildcardCount": {wildcard_count},
-  "categories": [{categories}],
-  "categoryCount": {category_count},
-  "published": "{now}",
-  "minAppVersion": "1.0.0",
-  "categoryStats": {stats_json}
-}}"#,
-        domain_count = exact_count + wildcard_count,
-        categories = categories_json.join(", "),
-        category_count = categories.len(),
-    )
+    let value = json!({
+        "version": version,
+        "filename": filename,
+        "size": binary_size,
+        "sha256": sha256,
+        "domainCount": exact_count + wildcard_count,
+        "exactCount": exact_count,
+        "wildcardCount": wildcard_count,
+        "categories": categories,
+        "categoryCount": categories.len(),
+        "published": now,
+        "minAppVersion": "1.0.0",
+        "categoryStats": stats_map,
+    });
+
+    serde_json::to_string_pretty(&value).expect("metadata serialization should not fail")
 }
 
 fn date_version() -> String {
@@ -153,14 +155,29 @@ mod tests {
             500,
             100,
             &["cat1".to_string(), "cat2".to_string()],
-            &[("cat1".to_string(), 400, 50), ("cat2".to_string(), 100, 50)],
+            &[
+                CategoryStat {
+                    name: "cat1".to_string(),
+                    exact: 400,
+                    wildcard: 50,
+                },
+                CategoryStat {
+                    name: "cat2".to_string(),
+                    exact: 100,
+                    wildcard: 50,
+                },
+            ],
         );
-        assert!(meta.contains("\"version\""));
-        assert!(meta.contains("\"filename\": \"blocklist-test123.bin.gz\""));
-        assert!(meta.contains("\"size\": 1000"));
-        assert!(meta.contains("\"sha256\": \"abc123\""));
-        assert!(meta.contains("\"domainCount\": 600"));
-        assert!(meta.contains("\"exactCount\": 500"));
-        assert!(meta.contains("\"wildcardCount\": 100"));
+
+        // Verify it's valid JSON
+        let parsed: serde_json::Value = serde_json::from_str(&meta).unwrap();
+        assert_eq!(parsed["filename"], "blocklist-test123.bin.gz");
+        assert_eq!(parsed["size"], 1000);
+        assert_eq!(parsed["sha256"], "abc123");
+        assert_eq!(parsed["domainCount"], 600);
+        assert_eq!(parsed["exactCount"], 500);
+        assert_eq!(parsed["wildcardCount"], 100);
+        assert_eq!(parsed["categoryCount"], 2);
+        assert_eq!(parsed["categoryStats"]["cat1"]["exact"], 400);
     }
 }

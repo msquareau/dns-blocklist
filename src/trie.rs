@@ -21,6 +21,12 @@ pub struct Trie {
     pub count: usize,
 }
 
+impl Default for Trie {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Trie {
     pub fn new() -> Self {
         Self {
@@ -47,39 +53,61 @@ impl Trie {
     }
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
-        serialize_node(&self.root, buf);
+        // Reserve estimated capacity: ~20 bytes per entry (flags + bitmap + child entries)
+        buf.reserve(self.count * 20);
+        serialize_iterative(&self.root, buf);
     }
 }
 
-fn serialize_node(node: &Node, buf: &mut Vec<u8>) {
-    let child_count = node.children.len().min(127);
-    let mut flags = (child_count as u8) << 1;
-    if node.is_terminal {
-        flags |= 0x01;
-    }
-    buf.push(flags);
-
-    if node.is_terminal {
-        buf.extend_from_slice(&node.category_bitmap.to_le_bytes());
+/// Iterative DFS serialization using an explicit stack.
+/// Produces the same byte-for-byte output as the recursive version
+/// without risk of stack overflow on deep tries.
+fn serialize_iterative(root: &Node, buf: &mut Vec<u8>) {
+    enum Work<'a> {
+        Serialize(&'a Node),
+        PatchOffset(usize), // buf position of the 4-byte relative offset to patch
     }
 
-    // Write child entries: 1 byte char + 4 bytes placeholder offset
-    let child_entries_start = buf.len();
-    for &byte in node.children.keys() {
-        buf.push(byte);
-        buf.extend_from_slice(&[0, 0, 0, 0]); // placeholder
-    }
+    let mut stack = vec![Work::Serialize(root)];
 
-    // Recurse into each child; patch relative offset
-    for (index, (_, child)) in node.children.iter().enumerate() {
-        let child_node_offset = buf.len();
-        let offset_placeholder_pos = child_entries_start + (index * 5) + 1;
-        let relative_offset = (child_node_offset - offset_placeholder_pos) as u32;
+    while let Some(work) = stack.pop() {
+        match work {
+            Work::PatchOffset(offset_pos) => {
+                let relative_offset = (buf.len() - offset_pos) as u32;
+                buf[offset_pos..offset_pos + 4].copy_from_slice(&relative_offset.to_le_bytes());
+            }
+            Work::Serialize(node) => {
+                let child_count = node.children.len();
+                assert!(
+                    child_count <= 127,
+                    "trie node has {child_count} children, max is 127"
+                );
 
-        buf[offset_placeholder_pos..offset_placeholder_pos + 4]
-            .copy_from_slice(&relative_offset.to_le_bytes());
+                let mut flags = (child_count as u8) << 1;
+                if node.is_terminal {
+                    flags |= 0x01;
+                }
+                buf.push(flags);
 
-        serialize_node(child, buf);
+                if node.is_terminal {
+                    buf.extend_from_slice(&node.category_bitmap.to_le_bytes());
+                }
+
+                // Write child entries: 1 byte char + 4 bytes placeholder offset
+                let child_entries_start = buf.len();
+                for &byte in node.children.keys() {
+                    buf.push(byte);
+                    buf.extend_from_slice(&[0, 0, 0, 0]); // placeholder
+                }
+
+                // Push children in reverse order so the first child is processed first (LIFO)
+                for (index, (_, child)) in node.children.iter().enumerate().rev() {
+                    let offset_pos = child_entries_start + (index * 5) + 1;
+                    stack.push(Work::Serialize(child));
+                    stack.push(Work::PatchOffset(offset_pos));
+                }
+            }
+        }
     }
 }
 
@@ -129,5 +157,45 @@ mod tests {
         // Root: no children, not terminal -> flags = 0x00
         assert_eq!(buf.len(), 1);
         assert_eq!(buf[0], 0x00);
+    }
+
+    #[test]
+    fn test_shared_prefix_count() {
+        let mut trie = Trie::new();
+        trie.insert("example.com", 1);
+        trie.insert("example.org", 2);
+        trie.insert("example.net", 4);
+        assert_eq!(trie.count, 3);
+
+        // All three should be terminal with their respective bitmaps
+        let mut node = &trie.root;
+        for b in "example.".bytes() {
+            node = &node.children[&b];
+        }
+        // After "example." we should have 3 children: 'c', 'n', 'o'
+        assert_eq!(node.children.len(), 3);
+        assert!(!node.is_terminal);
+    }
+
+    #[test]
+    fn test_single_char_keys() {
+        let mut trie = Trie::new();
+        trie.insert("a", 0x01);
+        trie.insert("b", 0x02);
+        trie.insert("c", 0x04);
+
+        assert_eq!(trie.count, 3);
+
+        let mut buf = Vec::new();
+        trie.serialize(&mut buf);
+
+        // Root should have 3 children, not terminal
+        assert_eq!(buf[0] >> 1, 3); // child_count = 3
+        assert_eq!(buf[0] & 0x01, 0); // not terminal
+
+        // After flags byte, 3 child entries: [byte, u32_offset] × 3 = 15 bytes
+        // Then 3 child nodes, each terminal with 1 byte flags + 4 bytes bitmap
+        // Total: 1 + 15 + 3*(1+4) = 31 bytes
+        assert_eq!(buf.len(), 31);
     }
 }

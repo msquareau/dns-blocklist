@@ -13,6 +13,19 @@ cargo build --release
 # Output: output/blocklist.bin, output/blocklist.bin.gz, output/blocklist.json
 ```
 
+## Testing
+
+```bash
+cargo test                        # Run all 33 tests (unit + integration)
+cargo clippy -- -D warnings       # Lint check
+cargo fmt --check                 # Format check
+```
+
+The test suite includes:
+
+- **23 unit tests** — parser formats, trie serialization, header encoding, metadata generation, config deserialization
+- **10 integration tests** — end-to-end compilation with a binary reader that walks the serialized SDBL v3 tries to verify domain lookups, category bitmaps, wildcard handling, determinism, and gzip round-trips
+
 ## How It Works
 
 1. Downloads DNS blocklists in parallel from upstream open-source sources
