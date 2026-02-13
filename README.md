@@ -113,6 +113,8 @@ A complete list of upstream sources with URLs is maintained in [`blocklist-sourc
 
 Because the majority of upstream data is licensed under the GNU General Public License v3.0, the compiled output and this tool are also distributed under GPL-3.0. If you redistribute the compiled blocklist binary, you must comply with the GPL-3.0 terms — including making the corresponding source code (this repository) available to recipients.
 
+For a complete list of all third-party software and data sources, including full license texts, see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
 ## Contributing
 
 Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
