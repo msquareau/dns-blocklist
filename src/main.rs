@@ -110,10 +110,16 @@ fn main() {
     }
     println!("Written {} bytes to blocklist.bin", binary_data.len());
 
-    // SHA-256
+    // SHA-256. sha2 0.11 changed finalize() to return hybrid_array::Array<u8, ..>,
+    // which no longer implements LowerHex — hex-encode byte-by-byte instead.
     let mut hasher = Sha256::new();
     hasher.update(&binary_data);
-    let sha256 = format!("{:x}", hasher.finalize());
+    let digest = hasher.finalize();
+    let mut sha256 = String::with_capacity(digest.len() * 2);
+    for byte in digest.iter() {
+        use std::fmt::Write as _;
+        write!(&mut sha256, "{byte:02x}").expect("writing to String never fails");
+    }
 
     // Gzip compress
     let gz_path = output_dir.join("blocklist.bin.gz");
