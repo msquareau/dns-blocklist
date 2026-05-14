@@ -1,6 +1,9 @@
 use dns_blocklist_compiler::config::SourceEntry;
-use dns_blocklist_compiler::parser::extract_expected_entry_count;
-use dns_blocklist_compiler::validator::{ValidationError, validate_download, validate_parse};
+use dns_blocklist_compiler::parser::{DomainStore, extract_expected_entry_count};
+use dns_blocklist_compiler::validator::{
+    Canary, ValidationError, validate_download, validate_output, validate_parse,
+};
+use dns_blocklist_compiler::{binary, validator};
 
 fn source_with_floors(format: &str, min_size: Option<usize>) -> SourceEntry {
     SourceEntry {
@@ -226,6 +229,156 @@ doubleclick.net
 fn extract_expected_entry_count_returns_none_for_files_without_header() {
     let content = "# A bare list with no entry count\nexample.com\n";
     assert_eq!(extract_expected_entry_count(content), None);
+}
+
+// ============================================================
+// Layer 3 — round-trip + canary + per-bit floor
+// ============================================================
+
+fn source_with_trie_floor(category_index: u8, min_trie: Option<usize>) -> SourceEntry {
+    SourceEntry {
+        category: format!("cat{category_index}"),
+        category_index,
+        file: "x.txt".into(),
+        base_url: "domains".into(),
+        format: "domains".into(),
+        display_name: format!("Source {category_index}"),
+        min_size_bytes: None,
+        min_parsed_entries: None,
+        min_trie_entries: min_trie,
+    }
+}
+
+fn doubleclick_canary() -> Canary {
+    Canary {
+        domain: "doubleclick.net".into(),
+        expected_min_bitmap: (1u32 << 3) | (1u32 << 4),
+        rationale: "test".into(),
+    }
+}
+
+#[test]
+fn canary_check_passes_when_both_required_bits_are_present() {
+    let mut store = DomainStore::new();
+    store.add_exact("doubleclick.net", 3);
+    store.add_exact("doubleclick.net", 4);
+    let cats = vec![
+        ("adsTrackersProPlus".into(), 3u8),
+        ("adsTrackersUltimate".into(), 4u8),
+    ];
+    let data = binary::compile(&store, &cats);
+
+    let errors = validate_output(&data, &[doubleclick_canary()], &[], &store, 100);
+    assert!(
+        errors.is_empty(),
+        "expected no validation errors, got: {errors:?}"
+    );
+}
+
+#[test]
+fn canary_check_catches_issue_20_symptom() {
+    // Simulate exactly the regression from issue #20: ultimate.txt content
+    // never made it into the trie, so doubleclick.net has bit 3 (pro.plus)
+    // but not bit 4 (ultimate).
+    let mut store = DomainStore::new();
+    store.add_exact("doubleclick.net", 3);
+    // Intentionally NOT adding bit 4 — this is the bug.
+    let cats = vec![
+        ("adsTrackersProPlus".into(), 3u8),
+        ("adsTrackersUltimate".into(), 4u8),
+    ];
+    let data = binary::compile(&store, &cats);
+
+    let errors = validate_output(&data, &[doubleclick_canary()], &[], &store, 100);
+    assert_eq!(
+        errors.len(),
+        1,
+        "expected one canary failure, got {errors:?}"
+    );
+    match &errors[0] {
+        ValidationError::CanaryMissing { domain, want, got } => {
+            assert_eq!(domain, "doubleclick.net");
+            assert_eq!(*want, (1u32 << 3) | (1u32 << 4));
+            // bit 3 set, bit 4 missing
+            assert_eq!(*got, 1u32 << 3);
+        }
+        other => panic!("expected CanaryMissing, got {other:?}"),
+    }
+}
+
+#[test]
+fn per_bit_floor_catches_undersized_category() {
+    let mut store = DomainStore::new();
+    // Only 1 entry tagged with bit 4
+    store.add_exact("doubleclick.net", 4);
+    let cats = vec![("adsTrackersUltimate".into(), 4u8)];
+    let data = binary::compile(&store, &cats);
+
+    let src = source_with_trie_floor(4, Some(100));
+    let errors = validate_output(&data, &[], std::slice::from_ref(&src), &store, 100);
+    assert_eq!(
+        errors.len(),
+        1,
+        "expected one floor failure, got {errors:?}"
+    );
+    match &errors[0] {
+        ValidationError::TrieEntriesBelowFloor {
+            bit, count, min, ..
+        } => {
+            assert_eq!(*bit, 4);
+            assert_eq!(*count, 1);
+            assert_eq!(*min, 100);
+        }
+        other => panic!("expected TrieEntriesBelowFloor, got {other:?}"),
+    }
+}
+
+#[test]
+fn round_trip_sample_matches_for_healthy_store() {
+    // Build a store with a few hundred domains, compile, and confirm every
+    // sampled lookup returns the same bitmap.
+    let mut store = DomainStore::new();
+    for i in 0..200 {
+        let domain = format!("host-{i:04}.example.com");
+        store.add_exact(&domain, (i % 16) as u8);
+    }
+    let cats: Vec<(String, u8)> = (0..16).map(|i| (format!("cat{i}"), i as u8)).collect();
+    let data = binary::compile(&store, &cats);
+
+    let errors = validate_output(&data, &[], &[], &store, 200);
+    assert!(
+        errors.is_empty(),
+        "healthy store should round-trip cleanly, got: {errors:?}"
+    );
+}
+
+#[test]
+fn empty_canary_list_does_not_fail_build() {
+    let mut store = DomainStore::new();
+    store.add_exact("any.example.com", 0);
+    let cats = vec![("cat0".into(), 0u8)];
+    let data = binary::compile(&store, &cats);
+
+    let errors = validate_output(&data, &[], &[], &store, 100);
+    assert!(errors.is_empty());
+}
+
+#[test]
+fn load_canaries_reads_the_repo_root_file() {
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("canary-domains.json");
+    let canaries = validator::load_canaries(&path).expect("repo root canary file should parse");
+    assert!(
+        canaries.iter().any(|c| c.domain == "doubleclick.net"),
+        "doubleclick.net must remain in the canary list — it is the issue-#20 regression canary"
+    );
+    let dc = canaries
+        .iter()
+        .find(|c| c.domain == "doubleclick.net")
+        .unwrap();
+    assert!(
+        dc.expected_min_bitmap & (1u32 << 4) != 0,
+        "doubleclick canary must require Ultimate bit 4"
+    );
 }
 
 #[test]

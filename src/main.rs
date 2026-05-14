@@ -150,6 +150,36 @@ fn main() {
     let compile_time = start_time.elapsed();
     println!("Compilation time: {:.2}s", compile_time.as_secs_f64());
 
+    // Layer 3: round-trip + canary + per-bit floor against the just-compiled bytes.
+    let canary_path = PathBuf::from("canary-domains.json");
+    let canaries = match validator::load_canaries(&canary_path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!(
+                "ERROR: Failed to load canary-domains.json: {e}. Layer 3 cannot run without it."
+            );
+            std::process::exit(1);
+        }
+    };
+    println!();
+    println!("Running output validation (Layer 3)...");
+    let output_errors =
+        validator::validate_output(&binary_data, &canaries, &config.sources, &store, 1000);
+    if !output_errors.is_empty() {
+        eprintln!(
+            "ERROR: {} output validation failure(s). Aborting before publishing.",
+            output_errors.len()
+        );
+        for e in &output_errors {
+            eprintln!("  - {e}");
+        }
+        std::process::exit(1);
+    }
+    println!(
+        "  OK — {} canary domain(s) round-tripped, sample lookups & per-bit floors all pass.",
+        canaries.len()
+    );
+
     // Create output directory
     if let Err(e) = std::fs::create_dir_all(&output_dir) {
         eprintln!("ERROR: Failed to create output directory: {e}");

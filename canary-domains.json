@@ -1,0 +1,26 @@
+{
+  "_description": "Per Issue #20 Layer 3 validation. Domains here MUST round-trip through the compiled SDBL v3 binary with their `expectedMinBitmap` bits set. The bit numbers correspond to `categoryIndex` in blocklist-sources.json. Add more canaries by editing this file — see docs/drift-runbook.md (TBD) for selection criteria.",
+  "_bitGuide": {
+    "0": "adsTrackersLight",
+    "1": "adsTrackersNormal",
+    "2": "adsTrackersPro",
+    "3": "adsTrackersProPlus",
+    "4": "adsTrackersUltimate",
+    "5": "threatIntelligence",
+    "8": "malwarePhishing",
+    "9": "adultContent",
+    "13": "appleTracker"
+  },
+  "canaries": [
+    {
+      "domain": "doubleclick.net",
+      "expectedMinBitmap": 24,
+      "rationale": "Per issue #20: present in HaGeZi pro.plus.txt (bit 3, value 8) and ultimate.txt (bit 4, value 16) — combined 0b11000 = 24. The exact regression canary: production shipped with bit 4 missing, so 'Ultimate Protection' users observed doubleclick.net unblocked. This canary fails if either bit is dropped from the artifact."
+    },
+    {
+      "domain": "www.doubleclick.net",
+      "expectedMinBitmap": 24,
+      "rationale": "Same upstream presence as doubleclick.net (HaGeZi pro.plus + ultimate). Distinct trie path — catches builder bugs that affect only certain prefixes."
+    }
+  ]
+}
