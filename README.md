@@ -5,13 +5,29 @@ Rust CLI tool that downloads DNS blocklists from popular open-source upstream so
 ## Build Instructions
 
 ```bash
-# Requirements: Rust 1.75+
+# Requirements: Rust 1.85+
 git clone https://github.com/msquareau/dns-blocklist.git
 cd dns-blocklist
 cargo build --release
 ./target/release/dns-blocklist-compiler --output ./output
 # Output: output/blocklist.bin, output/blocklist.bin.gz, output/blocklist.json
 ```
+
+### CLI flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `--output <dir>` | `.` | Where to write `blocklist.bin`, `blocklist.bin.gz`, and `blocklist.json`. |
+| `--strict` | (default) | Abort on any validation failure: bad download, parse-count regression, canary mismatch, per-bit floor breach. CI should use strict. |
+| `--best-effort` | | Tolerate up to 2 source-level (download or parse) failures and per-bit floor breaches — they downgrade to `WARN` lines. Canary mismatches and round-trip mismatches still abort because they indicate the artifact is broken, not just under-supplied. Use for local development iterations. |
+
+### Validation layers
+
+The compiler runs three validation passes; any of them can stop a bad artifact from shipping:
+
+1. **Layer 1 — download.** HTTP status must be 2xx, body must meet the source's optional `minSizeBytes`, `Content-Type` must be `text/*` (not `text/html` / `application/json`), and the first 30 non-comment lines must contain at least one parseable domain. Retries: 3× with 1s/2s/4s ±20 % jitter for network errors and 5xx.
+2. **Layer 2 — parse.** If the source emits a HaGeZi-style `# Number of entries: N` header, parsed count must be ≥ 90 % of N. Independently, the source's optional `minParsedEntries` floor must be met.
+3. **Layer 3 — output.** The just-compiled binary is parsed back through `src/reader.rs`, every canary in [`canary-domains.json`](canary-domains.json) is looked up and its `expectedMinBitmap` bits must be present, ~1000 random store entries are round-tripped through the trie, and every source's optional `minTrieEntries` floor is checked against the trie's per-bit terminal counts.
 
 ## Testing
 
@@ -74,14 +90,17 @@ All blocklist sources are defined in [`blocklist-sources.json`](blocklist-source
 
 **Each source entry:**
 
-| Field | Description |
-|-------|-------------|
-| `category` | Unique category identifier (camelCase) |
-| `categoryIndex` | Unique integer `0–255` — used as the bit position in the binary category bitmap |
-| `file` | Filename appended to the base URL to form the download URL |
-| `baseUrl` | Key into `baseUrls` — the download URL is `baseUrls[baseUrl]/file` |
-| `format` | List format: `domains`, `hosts`, or `adblock` (see below) |
-| `displayName` | Human-readable name shown in build output |
+| Field | Required | Description |
+|-------|----------|-------------|
+| `category` | yes | Unique category identifier (camelCase) |
+| `categoryIndex` | yes | Unique integer `0–31` — used as the bit position in the binary category bitmap |
+| `file` | yes | Filename appended to the base URL to form the download URL |
+| `baseUrl` | yes | Key into `baseUrls` — the download URL is `baseUrls[baseUrl]/file` |
+| `format` | yes | List format: `domains`, `hosts`, or `adblock` (see below) |
+| `displayName` | yes | Human-readable name shown in build output |
+| `minSizeBytes` | optional | Layer 1 — reject downloads smaller than this many bytes. Set ~80 % of the current upstream size. |
+| `minParsedEntries` | optional | Layer 2 — reject parses producing fewer than this many entries (line count). Independent of the upstream's declared count. |
+| `minTrieEntries` | optional | Layer 3 — abort if the compiled trie has fewer than this many entries with this source's bit set. |
 
 ### Supported Formats
 

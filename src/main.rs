@@ -2,9 +2,6 @@ use dns_blocklist_compiler::downloader::DownloadOutcome;
 use dns_blocklist_compiler::validator::{self, ValidationError};
 use dns_blocklist_compiler::{binary, config, downloader, metadata, parser, reader};
 
-/// Aggregate-failure threshold in strict mode. Wired to the CLI flag in C6 (T6).
-const MAX_FAILED_SOURCES_STRICT: usize = 0;
-
 use flate2::Compression;
 use flate2::write::GzEncoder;
 use sha2::{Digest, Sha256};
@@ -12,13 +9,69 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::time::Instant;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    Strict,
+    BestEffort,
+}
+
+impl Mode {
+    /// Max source-level failures (download + parse) tolerated before
+    /// aborting before compilation.
+    fn max_failed_sources(self) -> usize {
+        match self {
+            Mode::Strict => 0,
+            Mode::BestEffort => 2,
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Mode::Strict => "strict",
+            Mode::BestEffort => "best-effort",
+        }
+    }
+}
+
+struct CliArgs {
+    output_dir: PathBuf,
+    mode: Mode,
+}
+
+fn parse_args(args: &[String]) -> Result<CliArgs, String> {
+    let mut output_dir = PathBuf::from(".");
+    let mut mode = Mode::Strict;
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--output" => {
+                i += 1;
+                if i >= args.len() {
+                    return Err("--output requires a directory argument".into());
+                }
+                output_dir = PathBuf::from(&args[i]);
+            }
+            "--strict" => mode = Mode::Strict,
+            "--best-effort" => mode = Mode::BestEffort,
+            unknown => return Err(format!("unknown flag: {unknown}")),
+        }
+        i += 1;
+    }
+    Ok(CliArgs { output_dir, mode })
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    let output_dir = if args.len() > 2 && args[1] == "--output" {
-        PathBuf::from(&args[2])
-    } else {
-        PathBuf::from(".")
+    let cli = match parse_args(&args) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("ERROR: {e}");
+            eprintln!("Usage: dns-blocklist-compiler [--output <dir>] [--strict | --best-effort]");
+            std::process::exit(2);
+        }
     };
+    let output_dir = cli.output_dir;
+    let mode = cli.mode;
 
     let build_id = metadata::generate_build_id();
 
@@ -26,6 +79,7 @@ fn main() {
     println!("===============================================");
     println!("Build ID: {build_id}");
     println!("Output directory: {}", output_dir.display());
+    println!("Validation mode: {}", mode.label());
     println!();
 
     // Load config
@@ -88,9 +142,13 @@ fn main() {
                 match validator::validate_parse(parsed_total, expected, &result.source) {
                     Ok(()) => println!("  {} — {} — OK", result.source.display_name, delta_str),
                     Err(e) => {
+                        let tag = match mode {
+                            Mode::Strict => "FAIL",
+                            Mode::BestEffort => "WARN",
+                        };
                         println!(
-                            "  {} — {} — FAIL ({})",
-                            result.source.display_name, delta_str, e
+                            "  {} — {} — {} ({})",
+                            result.source.display_name, delta_str, tag, e
                         );
                         parse_failures.push(e);
                     }
@@ -107,22 +165,26 @@ fn main() {
     println!("Download Summary:");
     println!("  Successful: {total_downloaded}");
     println!("  Failed: {total_failed}");
-    if total_failed > MAX_FAILED_SOURCES_STRICT {
+    let max_source_failures = mode.max_failed_sources();
+    let total_source_failures = total_failed + parse_failures.len();
+    if total_source_failures > max_source_failures {
         eprintln!(
-            "ERROR: {} source(s) failed download validation, strict-mode threshold is {}. Aborting before compilation.",
-            total_failed, MAX_FAILED_SOURCES_STRICT
-        );
-        std::process::exit(1);
-    }
-    if !parse_failures.is_empty() {
-        eprintln!(
-            "ERROR: {} source(s) failed parse validation. Aborting before compilation.",
-            parse_failures.len()
+            "ERROR: {} source(s) failed validation ({} download, {} parse), {}-mode threshold is {}. Aborting before compilation.",
+            total_source_failures,
+            total_failed,
+            parse_failures.len(),
+            mode.label(),
+            max_source_failures
         );
         for e in &parse_failures {
             eprintln!("  - {e}");
         }
         std::process::exit(1);
+    }
+    if !parse_failures.is_empty() {
+        for e in &parse_failures {
+            eprintln!("WARN: {e}");
+        }
     }
     println!();
     println!(
@@ -161,19 +223,52 @@ fn main() {
     println!("Running output validation (Layer 3)...");
     let output_errors =
         validator::validate_output(&binary_data, &canaries, &config.sources, &store, 1000);
-    if !output_errors.is_empty() {
+    let (hard_errors, soft_errors): (Vec<_>, Vec<_>) = output_errors.into_iter().partition(|e| {
+        matches!(
+            e,
+            ValidationError::CanaryMissing { .. } | ValidationError::RoundTripMismatch { .. }
+        )
+    });
+    // Canary + round-trip mismatches always abort: they indicate the artifact
+    // itself is broken, not just under-supplied. Only the per-bit
+    // TrieEntriesBelowFloor errors are downgraded in best-effort.
+    if !hard_errors.is_empty() {
         eprintln!(
-            "ERROR: {} output validation failure(s). Aborting before publishing.",
-            output_errors.len()
+            "ERROR: {} canary/round-trip failure(s). Aborting before publishing.",
+            hard_errors.len()
         );
-        for e in &output_errors {
+        for e in &hard_errors {
             eprintln!("  - {e}");
         }
         std::process::exit(1);
     }
+    if !soft_errors.is_empty() {
+        match mode {
+            Mode::Strict => {
+                eprintln!(
+                    "ERROR: {} per-bit floor failure(s). Aborting before publishing (strict mode).",
+                    soft_errors.len()
+                );
+                for e in &soft_errors {
+                    eprintln!("  - {e}");
+                }
+                std::process::exit(1);
+            }
+            Mode::BestEffort => {
+                for e in &soft_errors {
+                    eprintln!("WARN: {e}");
+                }
+            }
+        }
+    }
     println!(
-        "  OK — {} canary domain(s) round-tripped, sample lookups & per-bit floors all pass.",
-        canaries.len()
+        "  OK — {} canary domain(s) round-tripped, sample lookups passed{}.",
+        canaries.len(),
+        if soft_errors.is_empty() {
+            ", per-bit floors met"
+        } else {
+            " (per-bit floors downgraded to warnings)"
+        }
     );
 
     // categoryStats: count entries in the compiled trie tagged with each bit.
