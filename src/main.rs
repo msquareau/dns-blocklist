@@ -1,6 +1,6 @@
 use dns_blocklist_compiler::downloader::DownloadOutcome;
 use dns_blocklist_compiler::validator::{self, ValidationError};
-use dns_blocklist_compiler::{binary, config, downloader, metadata, parser};
+use dns_blocklist_compiler::{binary, config, downloader, metadata, parser, reader};
 
 /// Aggregate-failure threshold in strict mode. Wired to the CLI flag in C6 (T6).
 const MAX_FAILED_SOURCES_STRICT: usize = 0;
@@ -45,7 +45,6 @@ fn main() {
     let results = downloader::download_all(&config);
 
     let mut store = parser::DomainStore::new();
-    let mut category_stats: Vec<metadata::CategoryStat> = Vec::new();
     let mut total_downloaded = 0;
     let mut total_failed = 0;
 
@@ -55,13 +54,15 @@ fn main() {
         match &result.outcome {
             DownloadOutcome::Ok(content) => {
                 let expected = parser::extract_expected_entry_count(content);
-                let (exact, wildcard) = parser::parse_blocklist(
+                // Lines-parsed counts feed only the validate_parse ratio guard;
+                // categoryStats is computed from the compiled trie below.
+                let (exact_lines, wildcard_lines) = parser::parse_blocklist(
                     content,
                     &result.source.format,
                     result.source.category_index,
                     &mut store,
                 );
-                let parsed_total = exact + wildcard;
+                let parsed_total = exact_lines + wildcard_lines;
                 let delta_str = match expected {
                     Some(exp) => {
                         let delta = parsed_total as i64 - exp as i64;
@@ -94,11 +95,6 @@ fn main() {
                         parse_failures.push(e);
                     }
                 }
-                category_stats.push(metadata::CategoryStat {
-                    name: result.source.category.clone(),
-                    exact,
-                    wildcard,
-                });
                 total_downloaded += 1;
             }
             DownloadOutcome::Rejected(_) | DownloadOutcome::NetworkError(_) => {
@@ -179,6 +175,29 @@ fn main() {
         "  OK — {} canary domain(s) round-tripped, sample lookups & per-bit floors all pass.",
         canaries.len()
     );
+
+    // categoryStats: count entries in the compiled trie tagged with each bit.
+    // This replaces the previous "lines parsed per source" semantics with
+    // "unique domains tagged with this category" — what consumers actually
+    // want from blocklist.json's categoryStats.
+    let header = reader::parse_header(&binary_data)
+        .expect("validate_output just parsed the same bytes — header must parse");
+    let exact_counts =
+        reader::count_entries_per_bit(&binary_data, header.exact_trie_offset as usize);
+    let wild_counts =
+        reader::count_entries_per_bit(&binary_data, header.wildcard_trie_offset as usize);
+    let category_stats: Vec<metadata::CategoryStat> = config
+        .sources
+        .iter()
+        .map(|s| {
+            let bit = s.category_index as usize;
+            metadata::CategoryStat {
+                name: s.category.clone(),
+                exact: exact_counts[bit],
+                wildcard: wild_counts[bit],
+            }
+        })
+        .collect();
 
     // Create output directory
     if let Err(e) = std::fs::create_dir_all(&output_dir) {

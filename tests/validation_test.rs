@@ -382,6 +382,31 @@ fn load_canaries_reads_the_repo_root_file() {
 }
 
 #[test]
+fn category_stats_reflect_trie_occupancy_not_parse_lines() {
+    // Older semantics: categoryStats = "lines parsed for this source", which
+    // double-counts case-insensitive duplicates and per-issue-#20 misrepresents
+    // what consumers actually want (how many unique domains carry the bit).
+    //
+    // Build via parse_blocklist with 3 case-variant inputs that resolve to the
+    // same domain. parse returns 3 lines processed, but the trie holds 1.
+    use dns_blocklist_compiler::parser::parse_blocklist;
+    use dns_blocklist_compiler::reader;
+    let content = "EXAMPLE.com\nexample.com\nExample.Com\n";
+    let mut store = DomainStore::new();
+    let (exact_lines, _) = parse_blocklist(content, "domains", 0, &mut store);
+    assert_eq!(exact_lines, 3, "parser counts all three input lines");
+
+    let cats = vec![("cat0".into(), 0u8)];
+    let data = binary::compile(&store, &cats);
+    let header = reader::parse_header(&data).unwrap();
+    let counts = reader::count_entries_per_bit(&data, header.exact_trie_offset as usize);
+    assert_eq!(
+        counts[0], 1,
+        "trie should contain one entry for bit 0 (the 3 inputs all dedup case-insensitively)"
+    );
+}
+
+#[test]
 fn the_issue_20_symptom_exactly_199_bytes() {
     // Re-create the exact symptom: HTTP 200 with a tiny body for a list that
     // should be megabytes. This is the regression that issue #20 documents
