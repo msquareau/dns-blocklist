@@ -4,3 +4,4 @@ pub mod downloader;
 pub mod metadata;
 pub mod parser;
 pub mod trie;
+pub mod validator;
