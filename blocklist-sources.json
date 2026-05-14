@@ -15,7 +15,10 @@
       "file": "light.txt",
       "baseUrl": "domains",
       "format": "domains",
-      "displayName": "HaGeZi Light"
+      "displayName": "HaGeZi Light",
+      "minSizeBytes": 4000000,
+      "minParsedEntries": 130000,
+      "minTrieEntries": 130000
     },
     {
       "category": "adsTrackersNormal",
@@ -23,7 +26,10 @@
       "file": "multi.txt",
       "baseUrl": "domains",
       "format": "domains",
-      "displayName": "HaGeZi Multi"
+      "displayName": "HaGeZi Multi",
+      "minSizeBytes": 6500000,
+      "minParsedEntries": 260000,
+      "minTrieEntries": 260000
     },
     {
       "category": "adsTrackersPro",
@@ -31,7 +37,10 @@
       "file": "pro.txt",
       "baseUrl": "domains",
       "format": "domains",
-      "displayName": "HaGeZi Pro"
+      "displayName": "HaGeZi Pro",
+      "minSizeBytes": 10000000,
+      "minParsedEntries": 360000,
+      "minTrieEntries": 360000
     },
     {
       "category": "adsTrackersProPlus",
@@ -39,7 +48,10 @@
       "file": "pro.plus.txt",
       "baseUrl": "domains",
       "format": "domains",
-      "displayName": "HaGeZi Pro++"
+      "displayName": "HaGeZi Pro++",
+      "minSizeBytes": 11500000,
+      "minParsedEntries": 420000,
+      "minTrieEntries": 420000
     },
     {
       "category": "adsTrackersUltimate",
@@ -47,7 +59,10 @@
       "file": "ultimate.txt",
       "baseUrl": "domains",
       "format": "domains",
-      "displayName": "HaGeZi Ultimate"
+      "displayName": "HaGeZi Ultimate",
+      "minSizeBytes": 13500000,
+      "minParsedEntries": 520000,
+      "minTrieEntries": 520000
     },
     {
       "category": "threatIntelligence",
@@ -55,7 +70,10 @@
       "file": "tif.txt",
       "baseUrl": "domains",
       "format": "domains",
-      "displayName": "HaGeZi Threat Intelligence"
+      "displayName": "HaGeZi Threat Intelligence",
+      "minSizeBytes": 16500000,
+      "minParsedEntries": 900000,
+      "minTrieEntries": 900000
     },
     {
       "category": "newlyRegisteredDomains",

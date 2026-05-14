@@ -1,5 +1,10 @@
 use crate::config::SourceEntry;
+use crate::parser::{DomainStore, parse_blocklist};
 use std::fmt;
+
+const SMELL_TEST_LINES: usize = 30;
+const ALLOWED_CONTENT_TYPES: &[&str] = &["text/plain", "text/"];
+const REJECTED_CONTENT_TYPES: &[&str] = &["text/html", "application/json", "application/xml"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValidationError {
@@ -124,7 +129,7 @@ impl std::error::Error for ValidationError {}
 
 pub fn validate_download(
     status: u16,
-    _content_type: Option<&str>,
+    content_type: Option<&str>,
     body: &str,
     source: &SourceEntry,
 ) -> Result<(), ValidationError> {
@@ -134,16 +139,64 @@ pub fn validate_download(
             status,
         });
     }
-    if body.is_empty() {
+    let min_size = source.min_size_bytes.unwrap_or(1);
+    if body.len() < min_size {
         return Err(ValidationError::TooSmall {
             source: source.display_name.clone(),
-            actual: 0,
-            min: 1,
+            actual: body.len(),
+            min: min_size,
+        });
+    }
+    if let Some(ct) = content_type {
+        let ct_lower = ct.to_ascii_lowercase();
+        if REJECTED_CONTENT_TYPES
+            .iter()
+            .any(|bad| ct_lower.contains(bad))
+        {
+            return Err(ValidationError::BadContentType {
+                source: source.display_name.clone(),
+                content_type: ct.to_string(),
+            });
+        }
+        if !ALLOWED_CONTENT_TYPES
+            .iter()
+            .any(|good| ct_lower.contains(good))
+        {
+            return Err(ValidationError::BadContentType {
+                source: source.display_name.clone(),
+                content_type: ct.to_string(),
+            });
+        }
+    }
+    if !looks_like_domain_list(body, &source.format) {
+        return Err(ValidationError::NotADomainList {
+            source: source.display_name.clone(),
+            sampled: SMELL_TEST_LINES,
         });
     }
     Ok(())
 }
 
+fn looks_like_domain_list(body: &str, format: &str) -> bool {
+    let sample: String = body
+        .lines()
+        .filter(|l| {
+            let t = l.trim();
+            !t.is_empty() && !t.starts_with('#') && !t.starts_with('!')
+        })
+        .take(SMELL_TEST_LINES)
+        .collect::<Vec<_>>()
+        .join("\n");
+    if sample.is_empty() {
+        return false;
+    }
+    let mut store = DomainStore::new();
+    let (exact, wildcard) = parse_blocklist(&sample, format, 0, &mut store);
+    exact + wildcard > 0
+}
+
+/// Layer 2 entry. Currently enforces only the trivial parsed>=1 floor; full
+/// ratio + min_parsed_entries semantics arrive in T3 (commit C3).
 pub fn validate_parse(
     parsed: usize,
     _expected: Option<usize>,
@@ -187,6 +240,9 @@ mod tests {
             base_url: "domains".into(),
             format: "domains".into(),
             display_name: "Test Source".into(),
+            min_size_bytes: None,
+            min_parsed_entries: None,
+            min_trie_entries: None,
         }
     }
 

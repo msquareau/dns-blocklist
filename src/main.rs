@@ -1,4 +1,8 @@
+use dns_blocklist_compiler::downloader::DownloadOutcome;
 use dns_blocklist_compiler::{binary, config, downloader, metadata, parser};
+
+/// Aggregate-failure threshold in strict mode. Wired to the CLI flag in C6 (T6).
+const MAX_FAILED_SOURCES_STRICT: usize = 0;
 
 use flate2::Compression;
 use flate2::write::GzEncoder;
@@ -45,8 +49,8 @@ fn main() {
     let mut total_failed = 0;
 
     for result in &results {
-        match &result.content {
-            Some(content) => {
+        match &result.outcome {
+            DownloadOutcome::Ok(content) => {
                 let (exact, wildcard) = parser::parse_blocklist(
                     content,
                     &result.source.format,
@@ -64,7 +68,7 @@ fn main() {
                 });
                 total_downloaded += 1;
             }
-            None => {
+            DownloadOutcome::Rejected(_) | DownloadOutcome::NetworkError(_) => {
                 total_failed += 1;
             }
         }
@@ -74,6 +78,13 @@ fn main() {
     println!("Download Summary:");
     println!("  Successful: {total_downloaded}");
     println!("  Failed: {total_failed}");
+    if total_failed > MAX_FAILED_SOURCES_STRICT {
+        eprintln!(
+            "ERROR: {} source(s) failed validation, strict-mode threshold is {}. Aborting before compilation.",
+            total_failed, MAX_FAILED_SOURCES_STRICT
+        );
+        std::process::exit(1);
+    }
     println!();
     println!(
         "Total unique domains: {} exact, {} wildcard",
