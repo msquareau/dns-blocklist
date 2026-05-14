@@ -1,5 +1,6 @@
 use dns_blocklist_compiler::config::SourceEntry;
-use dns_blocklist_compiler::validator::{ValidationError, validate_download};
+use dns_blocklist_compiler::parser::extract_expected_entry_count;
+use dns_blocklist_compiler::validator::{ValidationError, validate_download, validate_parse};
 
 fn source_with_floors(format: &str, min_size: Option<usize>) -> SourceEntry {
     SourceEntry {
@@ -133,6 +134,98 @@ fn accepts_healthy_adblock_format() {
 ||fakebank.example.net^
 ";
     validate_download(200, Some("text/plain"), body, &src).unwrap();
+}
+
+fn source_with_parse_floor(min_parsed: Option<usize>) -> SourceEntry {
+    SourceEntry {
+        category: "adsTrackersUltimate".into(),
+        category_index: 4,
+        file: "ultimate.txt".into(),
+        base_url: "domains".into(),
+        format: "domains".into(),
+        display_name: "HaGeZi Ultimate (test)".into(),
+        min_size_bytes: None,
+        min_parsed_entries: min_parsed,
+        min_trie_entries: None,
+    }
+}
+
+#[test]
+fn parse_ratio_below_90_percent_is_regression() {
+    let src = source_with_parse_floor(None);
+    // declared 657403, parsed 1 — the exact issue-#20 symptom
+    let err = validate_parse(1, Some(657403), &src).unwrap_err();
+    match err {
+        ValidationError::CountRegression {
+            parsed, expected, ..
+        } => {
+            assert_eq!(parsed, 1);
+            assert_eq!(expected, 657403);
+        }
+        other => panic!("expected CountRegression, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_ratio_at_exact_90_percent_passes() {
+    let src = source_with_parse_floor(None);
+    // 0.9 * 100000 = 90000 exactly
+    validate_parse(90_000, Some(100_000), &src).unwrap();
+}
+
+#[test]
+fn parse_ratio_just_below_90_percent_fails() {
+    let src = source_with_parse_floor(None);
+    let err = validate_parse(89_999, Some(100_000), &src).unwrap_err();
+    assert!(matches!(err, ValidationError::CountRegression { .. }));
+}
+
+#[test]
+fn min_parsed_entries_floor_applies_when_no_upstream_header() {
+    let src = source_with_parse_floor(Some(1000));
+    let err = validate_parse(500, None, &src).unwrap_err();
+    match err {
+        ValidationError::BelowFloor { parsed, min, .. } => {
+            assert_eq!(parsed, 500);
+            assert_eq!(min, 1000);
+        }
+        other => panic!("expected BelowFloor, got {other:?}"),
+    }
+}
+
+#[test]
+fn min_parsed_entries_floor_also_applies_with_upstream_header() {
+    // Both checks apply: ratio passes (95000 / 100000 = 95%), but absolute floor fails.
+    let src = source_with_parse_floor(Some(150_000));
+    let err = validate_parse(95_000, Some(100_000), &src).unwrap_err();
+    assert!(matches!(
+        err,
+        ValidationError::BelowFloor { min: 150_000, .. }
+    ));
+}
+
+#[test]
+fn parse_unconstrained_zero_still_fails() {
+    let src = source_with_parse_floor(None);
+    let err = validate_parse(0, None, &src).unwrap_err();
+    assert!(matches!(err, ValidationError::BelowFloor { parsed: 0, .. }));
+}
+
+#[test]
+fn extract_expected_entry_count_recognises_hagezi_ultimate_header() {
+    let content = "\
+# Title: HaGeZi's Ultimate DNS Blocklist
+# Number of entries: 657403
+# -----------------------------------------------------------
+doubleclick.net
+";
+    assert_eq!(extract_expected_entry_count(content), Some(657403));
+}
+
+#[test]
+fn extract_expected_entry_count_returns_none_for_files_without_header() {
+    let content = "# A bare list with no entry count\nexample.com\n";
+    assert_eq!(extract_expected_entry_count(content), None);
 }
 
 #[test]

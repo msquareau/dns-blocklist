@@ -133,6 +133,34 @@ pub fn parse_blocklist(
     (exact_count, wildcard_count)
 }
 
+/// Extract the upstream-declared entry count from a HaGeZi blocklist header.
+///
+/// HaGeZi `domains/*.txt` and `adblock/*.txt` files include a comment-block line
+/// of the form `# Number of entries: <N>` (or `! Number of entries: <N>` in
+/// adblock files). Walk only the leading comment/blank block — the header lives
+/// at the top — and return the parsed integer, or None if absent.
+pub fn extract_expected_entry_count(content: &str) -> Option<usize> {
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let body_after_comment = trimmed
+            .strip_prefix('#')
+            .or_else(|| trimmed.strip_prefix('!'));
+        let body = match body_after_comment {
+            Some(b) => b.trim(),
+            None => return None, // first non-comment line — header block is over
+        };
+        if let Some(rest) = body.strip_prefix("Number of entries:") {
+            if let Ok(n) = rest.trim().parse::<usize>() {
+                return Some(n);
+            }
+        }
+    }
+    None
+}
+
 fn is_valid_domain(domain: &str) -> bool {
     if !domain.contains('.') || domain.len() < 3 || domain.len() > 253 {
         return false;
@@ -326,6 +354,63 @@ mod tests {
     fn test_category_index_overflow_panics() {
         let mut store = DomainStore::new();
         store.add_exact("example.com", 32);
+    }
+
+    #[test]
+    fn extract_expected_entry_count_from_hagezi_domains_header() {
+        let content = "\
+# Title: HaGeZi's Ultimate DNS Blocklist
+# Description: Ultimate Protection
+# Version: 2026.05.14
+# Last modified: Wed, 14 May 2026 04:00:00 +0000
+# Source: https://github.com/hagezi/dns-blocklists
+# License: https://www.gnu.org/licenses/agpl-3.0.en.html
+# -----------------------------------------------------------
+# Number of entries: 657403
+# -----------------------------------------------------------
+
+doubleclick.net
+google-analytics.com
+";
+        assert_eq!(extract_expected_entry_count(content), Some(657403));
+    }
+
+    #[test]
+    fn extract_expected_entry_count_from_adblock_header() {
+        let content = "\
+! Title: HaGeZi Fake/Phishing
+! Number of entries: 14865
+! -----------------------------------------------------------
+||scam.example.com^
+";
+        assert_eq!(extract_expected_entry_count(content), Some(14865));
+    }
+
+    #[test]
+    fn extract_expected_entry_count_returns_none_when_absent() {
+        let content = "\
+# Title: A list without a count
+# Some other comment
+example.com
+";
+        assert_eq!(extract_expected_entry_count(content), None);
+    }
+
+    #[test]
+    fn extract_expected_entry_count_stops_at_first_non_comment_line() {
+        // The header lives at the top. If a line claiming "Number of entries"
+        // appears further down, we don't want to misread it.
+        let content = "\
+# Title: example
+example.com
+# Number of entries: 999999
+";
+        assert_eq!(extract_expected_entry_count(content), None);
+    }
+
+    #[test]
+    fn extract_expected_entry_count_handles_empty_input() {
+        assert_eq!(extract_expected_entry_count(""), None);
     }
 
     #[test]

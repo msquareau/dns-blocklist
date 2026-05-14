@@ -195,14 +195,38 @@ fn looks_like_domain_list(body: &str, format: &str) -> bool {
     exact + wildcard > 0
 }
 
-/// Layer 2 entry. Currently enforces only the trivial parsed>=1 floor; full
-/// ratio + min_parsed_entries semantics arrive in T3 (commit C3).
+/// Validate the parser's output against (a) the upstream-declared entry count
+/// (90 % floor) and (b) the source's optional `min_parsed_entries` floor.
+/// The 90 % allowance lets the parser legitimately drop `localhost`, IPv4
+/// addresses, malformed labels etc. while still catching the issue-#20 case
+/// (657403 declared → 1 parsed).
 pub fn validate_parse(
     parsed: usize,
-    _expected: Option<usize>,
+    expected: Option<usize>,
     source: &SourceEntry,
 ) -> Result<(), ValidationError> {
-    if parsed == 0 {
+    if let Some(exp) = expected
+        && exp > 0
+    {
+        let floor = (exp as f64 * 0.90) as usize;
+        if parsed < floor {
+            return Err(ValidationError::CountRegression {
+                source: source.display_name.clone(),
+                parsed,
+                expected: exp,
+            });
+        }
+    }
+    if let Some(min) = source.min_parsed_entries
+        && parsed < min
+    {
+        return Err(ValidationError::BelowFloor {
+            source: source.display_name.clone(),
+            parsed,
+            min,
+        });
+    }
+    if expected.is_none() && source.min_parsed_entries.is_none() && parsed == 0 {
         return Err(ValidationError::BelowFloor {
             source: source.display_name.clone(),
             parsed,

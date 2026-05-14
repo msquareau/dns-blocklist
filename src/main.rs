@@ -1,4 +1,5 @@
 use dns_blocklist_compiler::downloader::DownloadOutcome;
+use dns_blocklist_compiler::validator::{self, ValidationError};
 use dns_blocklist_compiler::{binary, config, downloader, metadata, parser};
 
 /// Aggregate-failure threshold in strict mode. Wired to the CLI flag in C6 (T6).
@@ -48,19 +49,51 @@ fn main() {
     let mut total_downloaded = 0;
     let mut total_failed = 0;
 
+    let mut parse_failures: Vec<ValidationError> = Vec::new();
+
     for result in &results {
         match &result.outcome {
             DownloadOutcome::Ok(content) => {
+                let expected = parser::extract_expected_entry_count(content);
                 let (exact, wildcard) = parser::parse_blocklist(
                     content,
                     &result.source.format,
                     result.source.category_index,
                     &mut store,
                 );
-                println!(
-                    "  {} — {} exact, {} wildcard",
-                    result.source.display_name, exact, wildcard
-                );
+                let parsed_total = exact + wildcard;
+                let delta_str = match expected {
+                    Some(exp) => {
+                        let delta = parsed_total as i64 - exp as i64;
+                        let pct = if exp > 0 {
+                            (parsed_total as f64 - exp as f64) / exp as f64 * 100.0
+                        } else {
+                            0.0
+                        };
+                        format!(
+                            "upstream: {}, parsed: {} ({:+} / {:.1}%)",
+                            exp, parsed_total, delta, pct
+                        )
+                    }
+                    None => format!(
+                        "upstream: <none>, parsed: {}{}",
+                        parsed_total,
+                        match result.source.min_parsed_entries {
+                            Some(m) => format!(" (min_parsed_entries floor {})", m),
+                            None => String::new(),
+                        }
+                    ),
+                };
+                match validator::validate_parse(parsed_total, expected, &result.source) {
+                    Ok(()) => println!("  {} — {} — OK", result.source.display_name, delta_str),
+                    Err(e) => {
+                        println!(
+                            "  {} — {} — FAIL ({})",
+                            result.source.display_name, delta_str, e
+                        );
+                        parse_failures.push(e);
+                    }
+                }
                 category_stats.push(metadata::CategoryStat {
                     name: result.source.category.clone(),
                     exact,
@@ -80,9 +113,19 @@ fn main() {
     println!("  Failed: {total_failed}");
     if total_failed > MAX_FAILED_SOURCES_STRICT {
         eprintln!(
-            "ERROR: {} source(s) failed validation, strict-mode threshold is {}. Aborting before compilation.",
+            "ERROR: {} source(s) failed download validation, strict-mode threshold is {}. Aborting before compilation.",
             total_failed, MAX_FAILED_SOURCES_STRICT
         );
+        std::process::exit(1);
+    }
+    if !parse_failures.is_empty() {
+        eprintln!(
+            "ERROR: {} source(s) failed parse validation. Aborting before compilation.",
+            parse_failures.len()
+        );
+        for e in &parse_failures {
+            eprintln!("  - {e}");
+        }
         std::process::exit(1);
     }
     println!();
