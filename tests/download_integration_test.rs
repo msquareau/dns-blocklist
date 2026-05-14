@@ -27,6 +27,9 @@ fn single_source_config(
             base_url: base_url_key.to_string(),
             format: format.to_string(),
             display_name: format!("Test {}", category),
+            min_size_bytes: None,
+            min_parsed_entries: None,
+            min_trie_entries: None,
         }],
     }
 }
@@ -50,8 +53,8 @@ fn test_download_and_compile_domains_format() {
     let results = downloader::download_all(&cfg);
     assert_eq!(results.len(), 1);
     let content = results[0]
-        .content
-        .as_ref()
+        .outcome
+        .content()
         .expect("download should succeed");
     assert!(
         content.len() > 100,
@@ -120,8 +123,8 @@ fn test_download_and_compile_adblock_format() {
     let results = downloader::download_all(&cfg);
     assert_eq!(results.len(), 1);
     let content = results[0]
-        .content
-        .as_ref()
+        .outcome
+        .content()
         .expect("download should succeed");
     assert!(
         content.len() > 1000,

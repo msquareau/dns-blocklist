@@ -47,8 +47,16 @@ jobs:
       - name: Generate third-party notices
         run: ./scripts/generate-third-party-notices.sh
 
-      - name: Run compiler
-        run: ./target/release/dns-blocklist-compiler --output output/
+      - name: Run compiler (strict mode — fail on any validation regression)
+        run: ./target/release/dns-blocklist-compiler --output output/ --strict
+
+      - name: Upload validation report as workflow artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-report
+          path: output/validation-report.txt
+          if-no-files-found: warn
 
       - name: Generate date-based tag
         id: tag
@@ -99,4 +107,5 @@ jobs:
           files: |
             output/blocklist.bin.gz
             output/blocklist.json
+            output/validation-report.txt
             THIRD-PARTY-NOTICES.md

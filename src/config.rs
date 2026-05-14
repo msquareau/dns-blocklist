@@ -21,6 +21,12 @@ pub struct SourceEntry {
     pub base_url: String,
     pub format: String,
     pub display_name: String,
+    #[serde(default)]
+    pub min_size_bytes: Option<usize>,
+    #[serde(default)]
+    pub min_parsed_entries: Option<usize>,
+    #[serde(default)]
+    pub min_trie_entries: Option<usize>,
 }
 
 pub fn load_config(path: &Path) -> Result<SourcesConfig, Box<dyn std::error::Error>> {
