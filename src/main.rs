@@ -101,6 +101,10 @@ fn main() {
     let mut store = parser::DomainStore::new();
     let mut total_downloaded = 0;
     let mut total_failed = 0;
+    // Accumulated per-source lines for validation-report.txt (T7). Each line
+    // corresponds to one configured source and captures download status,
+    // parse delta, and the validate_parse verdict.
+    let mut report_source_lines: Vec<String> = Vec::new();
 
     let mut parse_failures: Vec<ValidationError> = Vec::new();
 
@@ -139,23 +143,40 @@ fn main() {
                         }
                     ),
                 };
-                match validator::validate_parse(parsed_total, expected, &result.source) {
-                    Ok(()) => println!("  {} — {} — OK", result.source.display_name, delta_str),
-                    Err(e) => {
-                        let tag = match mode {
-                            Mode::Strict => "FAIL",
-                            Mode::BestEffort => "WARN",
-                        };
-                        println!(
-                            "  {} — {} — {} ({})",
-                            result.source.display_name, delta_str, tag, e
-                        );
-                        parse_failures.push(e);
-                    }
-                }
+                let verdict =
+                    match validator::validate_parse(parsed_total, expected, &result.source) {
+                        Ok(()) => "OK".to_string(),
+                        Err(e) => {
+                            let tag = match mode {
+                                Mode::Strict => "FAIL",
+                                Mode::BestEffort => "WARN",
+                            };
+                            let line = format!("{} ({})", tag, e);
+                            parse_failures.push(e);
+                            line
+                        }
+                    };
+                let line = format!(
+                    "  {} — {} — {}",
+                    result.source.display_name, delta_str, verdict
+                );
+                println!("{line}");
+                report_source_lines.push(line);
                 total_downloaded += 1;
             }
-            DownloadOutcome::Rejected(_) | DownloadOutcome::NetworkError(_) => {
+            DownloadOutcome::Rejected(e) => {
+                let line = format!(
+                    "  {} — download REJECTED: {}",
+                    result.source.display_name, e
+                );
+                println!("{line}");
+                report_source_lines.push(line);
+                total_failed += 1;
+            }
+            DownloadOutcome::NetworkError(msg) => {
+                let line = format!("  {} — NETWORK ERROR: {}", result.source.display_name, msg);
+                println!("{line}");
+                report_source_lines.push(line);
                 total_failed += 1;
             }
         }
@@ -352,9 +373,95 @@ fn main() {
     }
     println!("Written metadata to blocklist.json");
 
+    // Validation report — uploaded as a workflow artifact alongside the binary.
+    let report_path = output_dir.join("validation-report.txt");
+    let report = build_validation_report(&ReportInputs {
+        build_id: &build_id,
+        mode,
+        total_sources: config.sources.len(),
+        store: &store,
+        source_lines: &report_source_lines,
+        category_stats: &category_stats,
+        canaries: &canaries,
+        soft_errors: &soft_errors,
+    });
+    if let Err(e) = std::fs::write(&report_path, &report) {
+        eprintln!("WARN: Failed to write validation-report.txt: {e}");
+    } else {
+        println!("Written validation report to {}", report_path.display());
+    }
+
     println!();
     println!("SUCCESS: Pre-compiled blocklist generated");
     println!("  Binary: {}", binary_path.display());
     println!("  Metadata: {}", metadata_path.display());
     println!("  SHA256: {sha256}");
+}
+
+struct ReportInputs<'a> {
+    build_id: &'a str,
+    mode: Mode,
+    total_sources: usize,
+    store: &'a parser::DomainStore,
+    source_lines: &'a [String],
+    category_stats: &'a [metadata::CategoryStat],
+    canaries: &'a [validator::Canary],
+    soft_errors: &'a [ValidationError],
+}
+
+fn build_validation_report(r: &ReportInputs<'_>) -> String {
+    use std::fmt::Write as _;
+
+    let mut s = String::new();
+    let _ = writeln!(s, "DNS Blocklist Validation Report");
+    let _ = writeln!(s, "================================");
+    let _ = writeln!(s, "Build ID: {}", r.build_id);
+    let _ = writeln!(s, "Mode: {}", r.mode.label());
+    let _ = writeln!(s, "Sources configured: {}", r.total_sources);
+    let _ = writeln!(s, "Unique exact domains: {}", r.store.exact_domains.len());
+    let _ = writeln!(
+        s,
+        "Unique wildcard suffixes: {}",
+        r.store.wildcard_suffixes.len()
+    );
+    let _ = writeln!(s);
+    let _ = writeln!(s, "=== Per-source (Layer 1 + Layer 2) ===");
+    for line in r.source_lines {
+        let _ = writeln!(s, "{line}");
+    }
+    let _ = writeln!(s);
+    let _ = writeln!(s, "=== Layer 3 ===");
+    let _ = writeln!(s, "Canaries checked: {} (all passed)", r.canaries.len());
+    for c in r.canaries {
+        let _ = writeln!(
+            s,
+            "  {} → required bits {:#010b}",
+            c.domain, c.expected_min_bitmap
+        );
+    }
+    let _ = writeln!(s, "Round-trip sample: OK (no store-vs-trie mismatches)");
+    if r.soft_errors.is_empty() {
+        let _ = writeln!(s, "Per-bit floors: all met");
+    } else {
+        let _ = writeln!(
+            s,
+            "Per-bit floors: {} below floor (warnings)",
+            r.soft_errors.len()
+        );
+        for e in r.soft_errors {
+            let _ = writeln!(s, "  - {e}");
+        }
+    }
+    let _ = writeln!(s);
+    let _ = writeln!(s, "=== Trie-derived categoryStats ===");
+    for stat in r.category_stats {
+        let _ = writeln!(
+            s,
+            "  {} — {} exact, {} wildcard",
+            stat.name, stat.exact, stat.wildcard
+        );
+    }
+    let _ = writeln!(s);
+    let _ = writeln!(s, "Final status: SUCCESS");
+    s
 }
