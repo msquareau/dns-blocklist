@@ -32,15 +32,18 @@ The compiler runs three validation passes; any of them can stop a bad artifact f
 ## Testing
 
 ```bash
-cargo test                        # Run all 33 tests (unit + integration)
+cargo test                        # Unit + integration tests
+cargo test -- --ignored           # Plus live-download tests (hits jsDelivr)
 cargo clippy -- -D warnings       # Lint check
 cargo fmt --check                 # Format check
 ```
 
-The test suite includes:
+The test suite covers:
 
-- **23 unit tests** — parser formats, trie serialization, header encoding, metadata generation, config deserialization
-- **10 integration tests** — end-to-end compilation with a binary reader that walks the serialized SDBL v3 tries to verify domain lookups, category bitmaps, wildcard handling, determinism, and gzip round-trips
+- **Inline unit tests** in every `src/*.rs` module — parser formats, trie serialization, header encoding, metadata generation, config deserialization, SDBL reader, the three validation layers.
+- **`tests/integration_test.rs`** — end-to-end compilation through the SDBL v3 reader to verify domain lookups, category bitmaps, wildcard handling, determinism, and gzip round-trips.
+- **`tests/validation_test.rs`** — the issue-#20 regression suite: HTTP 404, 500, too-small body, `text/html` rejection, smell-test rejection of HTML error pages, parse-count ratio guard, `minParsedEntries` floor, canary mismatch (including the literal "Ultimate bit 4 dropped" symptom), per-bit trie-entry floor, round-trip sampling.
+- **`tests/download_integration_test.rs`** — two `#[ignore]`d live-download tests gated behind `cargo test -- --ignored`; run in the release workflow.
 
 ## How It Works
 
