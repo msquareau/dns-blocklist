@@ -32,7 +32,8 @@ jobs:
         run: cargo build --release
 
       - name: Install cargo-about
-        run: cargo install --locked cargo-about
+        # cargo-about 0.9.0 gates the binary behind a `cli` feature.
+        run: cargo install --locked cargo-about --features cli
 
       - name: Check third-party notices are up to date
         run: |
