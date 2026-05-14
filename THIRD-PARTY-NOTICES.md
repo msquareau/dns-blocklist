@@ -268,15 +268,15 @@ OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 - **windows_x86_64_gnullvm 0.52.6** — [repository](https://github.com/microsoft/windows-rs)
 - **windows_x86_64_msvc 0.52.6** — [repository](https://github.com/microsoft/windows-rs)
 
-- **ureq 3.2.0** — [repository](https://github.com/algesten/ureq)
+- **ureq 3.3.0** — [repository](https://github.com/algesten/ureq)
 
 - **crc32fast 1.5.0** — [repository](https://github.com/srijs/rust-crc32fast)
 
-- **typenum 1.19.0** — [repository](https://github.com/paholg/typenum)
+- **typenum 1.20.0** — [repository](https://github.com/paholg/typenum)
 
 - **http 1.4.0** — [repository](https://github.com/hyperium/http)
 
-- **rustls-pki-types 1.14.0** — [repository](https://github.com/rustls/pki-types)
+- **rustls-pki-types 1.14.1** — [repository](https://github.com/rustls/pki-types)
 
 - **base64 0.22.1** — [repository](https://github.com/marshallpierce/rust-base64)
 - **cfg-if 1.0.4** — [repository](https://github.com/rust-lang/cfg-if)
@@ -287,35 +287,37 @@ OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 - **flate2 1.1.9** — [repository](https://github.com/rust-lang/flate2-rs)
 - **httparse 1.10.1** — [repository](https://github.com/seanmonstar/httparse)
 - **log 0.4.29** — [repository](https://github.com/rust-lang/log)
-- **once_cell 1.21.3** — [repository](https://github.com/matklad/once_cell)
+- **once_cell 1.21.4** — [repository](https://github.com/matklad/once_cell)
 - **percent-encoding 2.3.2** — [repository](https://github.com/servo/rust-url/)
 - **rayon-core 1.13.0** — [repository](https://github.com/rayon-rs/rayon)
-- **rayon 1.11.0** — [repository](https://github.com/rayon-rs/rayon)
+- **rayon 1.12.0** — [repository](https://github.com/rayon-rs/rayon)
 - **ring 0.17.14** — [repository](https://github.com/briansmith/ring)
-- **rustls 0.23.36** — [repository](https://github.com/rustls/rustls)
+- **rustls 0.23.40** — [repository](https://github.com/rustls/rustls)
 - **wasi 0.11.1+wasi-snapshot-preview1** — [repository](https://github.com/bytecodealliance/wasi)
 
-- **block-buffer 0.10.4** — [repository](https://github.com/RustCrypto/utils)
-- **cpufeatures 0.2.17** — [repository](https://github.com/RustCrypto/utils)
-- **crypto-common 0.1.7** — [repository](https://github.com/RustCrypto/traits)
-- **digest 0.10.7** — [repository](https://github.com/RustCrypto/traits)
-- **sha2 0.10.9** — [repository](https://github.com/RustCrypto/hashes)
+- **block-buffer 0.12.0** — [repository](https://github.com/RustCrypto/utils)
+- **const-oid 0.10.2** — [repository](https://github.com/RustCrypto/formats)
+- **cpufeatures 0.3.0** — [repository](https://github.com/RustCrypto/utils)
+- **crypto-common 0.2.1** — [repository](https://github.com/RustCrypto/traits)
+- **digest 0.11.3** — [repository](https://github.com/RustCrypto/traits)
+- **hybrid-array 0.4.12** — [repository](https://github.com/RustCrypto/hybrid-array)
+- **sha2 0.11.0** — [repository](https://github.com/RustCrypto/hashes)
 
 - **getrandom 0.2.17** — [repository](https://github.com/rust-random/getrandom)
 
-- **itoa 1.0.17** — [repository](https://github.com/dtolnay/itoa)
-- **libc 0.2.181** — [repository](https://github.com/rust-lang/libc)
+- **itoa 1.0.18** — [repository](https://github.com/dtolnay/itoa)
+- **libc 0.2.186** — [repository](https://github.com/rust-lang/libc)
 - **miniz_oxide 0.8.9** — [repository](https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide)
 - **proc-macro2 1.0.106** — [repository](https://github.com/dtolnay/proc-macro2)
-- **quote 1.0.44** — [repository](https://github.com/dtolnay/quote)
+- **quote 1.0.45** — [repository](https://github.com/dtolnay/quote)
 - **serde 1.0.228** — [repository](https://github.com/serde-rs/serde)
 - **serde_core 1.0.228** — [repository](https://github.com/serde-rs/serde)
 - **serde_derive 1.0.228** — [repository](https://github.com/serde-rs/serde)
 - **serde_json 1.0.149** — [repository](https://github.com/serde-rs/json)
-- **syn 2.0.115** — [repository](https://github.com/dtolnay/syn)
-- **unicode-ident 1.0.23** — [repository](https://github.com/dtolnay/unicode-ident)
-- **ureq-proto 0.5.3** — [repository](https://github.com/algesten/ureq-proto)
-- **utf-8 0.7.6** — [repository](https://github.com/SimonSapin/rust-utf8)
+- **syn 2.0.117** — [repository](https://github.com/dtolnay/syn)
+- **unicode-ident 1.0.24** — [repository](https://github.com/dtolnay/unicode-ident)
+- **ureq-proto 0.6.0** — [repository](https://github.com/algesten/ureq-proto)
+- **utf8-zero 0.8.1** — [repository](https://github.com/algesten/utf8-zero)
 
 ---
 
@@ -365,7 +367,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ### Community Data License Agreement Permissive 2.0 (`CDLA-Permissive-2.0`)
 
-- **webpki-roots 1.0.6** — [repository](https://github.com/rustls/webpki-roots)
+- **webpki-roots 1.0.7** — [repository](https://github.com/rustls/webpki-roots)
 
 <details>
 <summary>Full license text</summary>
@@ -714,7 +716,7 @@ The GNU General Public License does not permit incorporating your program into p
 
 - **ring 0.17.14** — [repository](https://github.com/briansmith/ring)
 
-- **rustls-webpki 0.103.9** — [repository](https://github.com/rustls/webpki)
+- **rustls-webpki 0.103.13** — [repository](https://github.com/rustls/webpki)
 
 ---
 
@@ -756,19 +758,17 @@ DEALINGS IN THE SOFTWARE.
 
 </details>
 
-- **simd-adler32 0.3.8** — [repository](https://github.com/mcountryman/simd-adler32)
+- **simd-adler32 0.3.9** — [repository](https://github.com/mcountryman/simd-adler32)
 
 - **zmij 1.0.21** — [repository](https://github.com/dtolnay/zmij)
 
 - **memchr 2.8.0** — [repository](https://github.com/BurntSushi/memchr)
 
-- **generic-array 0.14.7** — [repository](https://github.com/fizyk20/generic-array.git)
-
 ---
 
 ### Unicode License v3 (`Unicode-3.0`)
 
-- **unicode-ident 1.0.23** — [repository](https://github.com/dtolnay/unicode-ident)
+- **unicode-ident 1.0.24** — [repository](https://github.com/dtolnay/unicode-ident)
 
 <details>
 <summary>Full license text</summary>
