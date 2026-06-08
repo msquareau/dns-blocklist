@@ -16,9 +16,9 @@
       "baseUrl": "domains",
       "format": "domains",
       "displayName": "HaGeZi Light",
-      "minSizeBytes": 4000000,
-      "minParsedEntries": 130000,
-      "minTrieEntries": 130000
+      "minSizeBytes": 1500000,
+      "minParsedEntries": 75000,
+      "minTrieEntries": 75000
     },
     {
       "category": "adsTrackersNormal",
