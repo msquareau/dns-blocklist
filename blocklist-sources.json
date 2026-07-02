@@ -6,7 +6,8 @@
     "adblock": "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock",
     "hosts": "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/hosts",
     "wildcard": "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard",
-    "blocklistproject": "https://blocklistproject.github.io/Lists/alt-version"
+    "blocklistproject": "https://blocklistproject.github.io/Lists/alt-version",
+    "nrd": "https://raw.githubusercontent.com/hagezi/nrd/main/domains"
   },
   "sources": [
     {
@@ -79,7 +80,7 @@
       "category": "newlyRegisteredDomains",
       "categoryIndex": 6,
       "file": "nrd7.txt",
-      "baseUrl": "domains",
+      "baseUrl": "nrd",
       "format": "domains",
       "displayName": "HaGeZi NRD (7 days)"
     },
@@ -87,7 +88,7 @@
       "category": "dgaDetection",
       "categoryIndex": 7,
       "file": "dga7.txt",
-      "baseUrl": "domains",
+      "baseUrl": "nrd",
       "format": "domains",
       "displayName": "HaGeZi DGA (7 days)"
     },
