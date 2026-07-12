@@ -145,13 +145,11 @@ pub fn extract_expected_entry_count(content: &str) -> Option<usize> {
         if trimmed.is_empty() {
             continue;
         }
-        let body_after_comment = trimmed
+        // First non-comment line means the header block is over; `?` returns None.
+        let body = trimmed
             .strip_prefix('#')
-            .or_else(|| trimmed.strip_prefix('!'));
-        let body = match body_after_comment {
-            Some(b) => b.trim(),
-            None => return None, // first non-comment line — header block is over
-        };
+            .or_else(|| trimmed.strip_prefix('!'))?
+            .trim();
         if let Some(rest) = body.strip_prefix("Number of entries:") {
             if let Ok(n) = rest.trim().parse::<usize>() {
                 return Some(n);
