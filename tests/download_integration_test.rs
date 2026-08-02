@@ -45,7 +45,7 @@ fn test_download_and_compile_domains_format() {
         13,
         "native.apple.txt",
         "domains",
-        "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/domains",
+        "https://raw.githubusercontent.com/hagezi/dns-blocklists-legacy/main/domains",
         "domains",
     );
 

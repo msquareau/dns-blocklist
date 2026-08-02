@@ -2,9 +2,9 @@
   "version": 1,
   "description": "Category to HaGeZi blocklist URL mappings for pre-compilation",
   "baseUrls": {
-    "domains": "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/domains",
+    "domains": "https://raw.githubusercontent.com/hagezi/dns-blocklists-legacy/main/domains",
     "adblock": "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock",
-    "hosts": "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/hosts",
+    "hosts": "https://raw.githubusercontent.com/hagezi/dns-blocklists-legacy/main/hosts",
     "wildcard": "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard",
     "blocklistproject": "https://blocklistproject.github.io/Lists/alt-version",
     "nrd": "https://raw.githubusercontent.com/hagezi/nrd/main/domains"
