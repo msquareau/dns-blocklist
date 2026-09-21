@@ -5,7 +5,7 @@ Rust CLI tool that downloads DNS blocklists from popular open-source upstream so
 ## Build Instructions
 
 ```bash
-# Requirements: Rust 1.85+
+# Requirements: Rust 1.88+
 git clone https://github.com/msquareau/dns-blocklist.git
 cd dns-blocklist
 cargo build --release
