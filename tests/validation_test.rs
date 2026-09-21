@@ -1,9 +1,10 @@
 use dns_blocklist_compiler::config::SourceEntry;
 use dns_blocklist_compiler::parser::{DomainStore, extract_expected_entry_count};
+use dns_blocklist_compiler::run::{ReportInputs, RunStatus, build_validation_report};
 use dns_blocklist_compiler::validator::{
     Canary, ValidationError, validate_download, validate_output, validate_parse,
 };
-use dns_blocklist_compiler::{binary, validator};
+use dns_blocklist_compiler::{binary, counts, validator};
 
 fn source_with_floors(format: &str, min_size: Option<usize>) -> SourceEntry {
     SourceEntry {
@@ -14,7 +15,6 @@ fn source_with_floors(format: &str, min_size: Option<usize>) -> SourceEntry {
         format: format.into(),
         display_name: "HaGeZi Ultimate (test)".into(),
         min_size_bytes: min_size,
-        min_parsed_entries: None,
         min_trie_entries: None,
     }
 }
@@ -126,7 +126,6 @@ fn accepts_healthy_adblock_format() {
         format: "adblock".into(),
         display_name: "HaGeZi Fake/Phishing".into(),
         min_size_bytes: Some(50),
-        min_parsed_entries: None,
         min_trie_entries: None,
     };
     let body = "\
@@ -139,23 +138,9 @@ fn accepts_healthy_adblock_format() {
     validate_download(200, Some("text/plain"), body, &src).unwrap();
 }
 
-fn source_with_parse_floor(min_parsed: Option<usize>) -> SourceEntry {
-    SourceEntry {
-        category: "adsTrackersUltimate".into(),
-        category_index: 4,
-        file: "ultimate.txt".into(),
-        base_url: "domains".into(),
-        format: "domains".into(),
-        display_name: "HaGeZi Ultimate (test)".into(),
-        min_size_bytes: None,
-        min_parsed_entries: min_parsed,
-        min_trie_entries: None,
-    }
-}
-
 #[test]
 fn parse_ratio_below_90_percent_is_regression() {
-    let src = source_with_parse_floor(None);
+    let src = source_with_floors("domains", None);
     // declared 657403, parsed 1 — the exact issue-#20 symptom
     let err = validate_parse(1, Some(657403), &src).unwrap_err();
     match err {
@@ -171,45 +156,21 @@ fn parse_ratio_below_90_percent_is_regression() {
 
 #[test]
 fn parse_ratio_at_exact_90_percent_passes() {
-    let src = source_with_parse_floor(None);
+    let src = source_with_floors("domains", None);
     // 0.9 * 100000 = 90000 exactly
     validate_parse(90_000, Some(100_000), &src).unwrap();
 }
 
 #[test]
 fn parse_ratio_just_below_90_percent_fails() {
-    let src = source_with_parse_floor(None);
+    let src = source_with_floors("domains", None);
     let err = validate_parse(89_999, Some(100_000), &src).unwrap_err();
     assert!(matches!(err, ValidationError::CountRegression { .. }));
 }
 
 #[test]
-fn min_parsed_entries_floor_applies_when_no_upstream_header() {
-    let src = source_with_parse_floor(Some(1000));
-    let err = validate_parse(500, None, &src).unwrap_err();
-    match err {
-        ValidationError::BelowFloor { parsed, min, .. } => {
-            assert_eq!(parsed, 500);
-            assert_eq!(min, 1000);
-        }
-        other => panic!("expected BelowFloor, got {other:?}"),
-    }
-}
-
-#[test]
-fn min_parsed_entries_floor_also_applies_with_upstream_header() {
-    // Both checks apply: ratio passes (95000 / 100000 = 95%), but absolute floor fails.
-    let src = source_with_parse_floor(Some(150_000));
-    let err = validate_parse(95_000, Some(100_000), &src).unwrap_err();
-    assert!(matches!(
-        err,
-        ValidationError::BelowFloor { min: 150_000, .. }
-    ));
-}
-
-#[test]
 fn parse_unconstrained_zero_still_fails() {
-    let src = source_with_parse_floor(None);
+    let src = source_with_floors("domains", None);
     let err = validate_parse(0, None, &src).unwrap_err();
     assert!(matches!(err, ValidationError::BelowFloor { parsed: 0, .. }));
 }
@@ -244,7 +205,6 @@ fn source_with_trie_floor(category_index: u8, min_trie: Option<usize>) -> Source
         format: "domains".into(),
         display_name: format!("Source {category_index}"),
         min_size_bytes: None,
-        min_parsed_entries: None,
         min_trie_entries: min_trie,
     }
 }
@@ -422,4 +382,221 @@ fn the_issue_20_symptom_exactly_199_bytes() {
             ..
         }
     ));
+}
+
+// ============================================================
+// The degraded-run wiring — spec §9's central promise, exercised end to end
+// through the library items `main` orchestrates rather than owns.
+// ============================================================
+
+#[test]
+fn a_70_percent_parse_drop_leaves_the_run_status_at_exit_code_zero() {
+    let src = source_with_floors("domains", None);
+    let mut degraded: Vec<ValidationError> = Vec::new();
+    if let Some(e) = validator::check_parse_drop(&src, 30_000, Some(100_000), 0.6) {
+        degraded.push(e);
+    }
+    assert_eq!(
+        degraded.len(),
+        1,
+        "a 70% fall against the baseline must produce exactly one ParsedDrop"
+    );
+    assert!(matches!(degraded[0], ValidationError::ParsedDrop { .. }));
+
+    // Mirrors main's status derivation: a non-empty degraded list is
+    // Degraded, never Failed — the run still publishes.
+    let status = if degraded.is_empty() {
+        RunStatus::Ok
+    } else {
+        RunStatus::Degraded
+    };
+    assert_eq!(status, RunStatus::Degraded);
+    assert_eq!(status.exit_code(), 0);
+}
+
+#[test]
+fn a_source_that_drops_and_loses_its_header_together_stays_at_exit_code_zero_with_one_entry() {
+    use dns_blocklist_compiler::counts::SourceBaseline;
+
+    let src = source_with_floors("domains", None);
+    let baseline = SourceBaseline {
+        parsed: 100_000,
+        declared_count_seen: true,
+    };
+    let mut degraded: Vec<ValidationError> = Vec::new();
+    // Both check_parse_drop and check_missing_declared_count would fire
+    // independently on this input (a 70% fall, and no count declared this
+    // run against a baseline that had one) — check_parse_degraded must
+    // still record only one entry, and it must never reach the failure list.
+    if let Some(e) = validator::check_parse_degraded(&src, 30_000, None, Some(&baseline), 0.6) {
+        degraded.push(e);
+    }
+    assert_eq!(
+        degraded.len(),
+        1,
+        "a simultaneous drop and header loss must report as one degraded entry, not two"
+    );
+    assert!(matches!(degraded[0], ValidationError::ParsedDrop { .. }));
+
+    let status = if degraded.is_empty() {
+        RunStatus::Ok
+    } else {
+        RunStatus::Degraded
+    };
+    assert_eq!(status, RunStatus::Degraded);
+    assert_eq!(status.exit_code(), 0);
+}
+
+#[test]
+fn the_report_shows_a_degraded_section_when_something_degraded() {
+    let store = DomainStore::new();
+    let degraded = vec![ValidationError::ParsedDrop {
+        source: "Test Source".into(),
+        parsed: 30_000,
+        previous: 100_000,
+    }];
+    let report = build_validation_report(&ReportInputs {
+        build_id: "test-build",
+        status: RunStatus::Degraded,
+        total_sources: 1,
+        store: &store,
+        source_lines: &[],
+        category_stats: &[],
+        canaries: &[],
+        degraded: &degraded,
+    });
+    assert!(report.contains("Status: degraded"));
+    assert!(report.contains("=== Degraded ==="));
+    assert!(report.contains("Final status: degraded"));
+}
+
+#[test]
+fn the_report_omits_the_degraded_section_when_nothing_degraded() {
+    let store = DomainStore::new();
+    let degraded: Vec<ValidationError> = Vec::new();
+    let report = build_validation_report(&ReportInputs {
+        build_id: "test-build",
+        status: RunStatus::Ok,
+        total_sources: 1,
+        store: &store,
+        source_lines: &[],
+        category_stats: &[],
+        canaries: &[],
+        degraded: &degraded,
+    });
+    assert!(!report.contains("=== Degraded ==="));
+    assert!(!report.to_lowercase().contains("degraded"));
+    assert!(report.trim_end().ends_with("Final status: ok"));
+}
+
+#[test]
+fn every_configured_source_has_a_unique_display_name_and_category_index() {
+    // displayName is the baseline's primary key (src/counts.rs) and
+    // categoryIndex selects the bit each per-bit floor is checked against
+    // (validator::validate_output). Two sources sharing either would each be
+    // satisfied by the other's entries, and neither guard would ever fire.
+    let config =
+        dns_blocklist_compiler::config::load_config(std::path::Path::new("blocklist-sources.json"))
+            .expect("the shipped config must load");
+
+    let mut seen_names = std::collections::HashSet::new();
+    for source in &config.sources {
+        assert!(
+            seen_names.insert(source.display_name.clone()),
+            "duplicate displayName: {}",
+            source.display_name
+        );
+    }
+
+    let mut seen_indices = std::collections::HashSet::new();
+    for source in &config.sources {
+        assert!(
+            seen_indices.insert(source.category_index),
+            "duplicate categoryIndex {} on {}",
+            source.category_index,
+            source.display_name
+        );
+    }
+}
+
+#[test]
+fn every_configured_source_sets_both_floors() {
+    let config =
+        dns_blocklist_compiler::config::load_config(std::path::Path::new("blocklist-sources.json"))
+            .expect("the shipped config must load");
+    for source in &config.sources {
+        assert!(
+            source.min_size_bytes.unwrap_or(0) > 0,
+            "{} has no minSizeBytes",
+            source.display_name
+        );
+        assert!(
+            source.min_trie_entries.unwrap_or(0) > 0,
+            "{} has no minTrieEntries",
+            source.display_name
+        );
+    }
+}
+
+// Property 1, proven through the real persistence path.
+//
+// `property_1_a_source_that_never_declares_a_count_stays_silent_forever` in
+// src/validator.rs hand-builds its second- and later-run `SourceBaseline`
+// with a helper, so it only shows that the guard is correct given a
+// `declared_count_seen: false` value — it never shows that `counts::write`
+// followed by `counts::read` actually produces that value. The persistence
+// layer is exactly where this class of bug hid before: the effect only
+// appeared from the second run onward, once a baseline had actually been
+// written and read back. This test drives `counts::write`/`counts::read`
+// for real, across three simulated runs, so the round trip itself is under
+// test, not assumed.
+#[test]
+fn a_source_with_no_header_stays_silent_across_a_real_baseline_round_trip() {
+    let src = source_with_floors("domains", None);
+    let path = std::env::temp_dir().join(format!(
+        "sdbl-validation-test-no-header-baseline-{}.json",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&path);
+
+    // Run 1: no baseline file exists yet at all.
+    let run1_baseline = counts::read(&path);
+    assert!(run1_baseline.is_empty());
+    assert!(
+        validator::check_missing_declared_count(&src, None, run1_baseline.get(&src.display_name))
+            .is_none()
+    );
+
+    // Run 1 completes. main.rs records a baseline entry for every source
+    // that downloads and parses, header or not — built here exactly the
+    // way main.rs builds it, from an `expected` that is `None`.
+    let expected: Option<usize> = None;
+    let mut run1_counts = counts::Baseline::new();
+    run1_counts.insert(
+        src.display_name.clone(),
+        counts::SourceBaseline {
+            parsed: 12_345,
+            declared_count_seen: expected.is_some(),
+        },
+    );
+    counts::write(&path, &run1_counts);
+
+    // Run 2: read the baseline back off disk — this is the value that
+    // actually survived a real serialize-and-deserialize, not a hand-built
+    // stand-in for it.
+    let run2_baseline = counts::read(&path);
+    assert!(
+        validator::check_missing_declared_count(&src, None, run2_baseline.get(&src.display_name))
+            .is_none()
+    );
+
+    // Run 3: read it again. The guard must stay silent indefinitely, not
+    // just on the first read after the write.
+    let run3_baseline = counts::read(&path);
+    assert!(
+        validator::check_missing_declared_count(&src, None, run3_baseline.get(&src.display_name))
+            .is_none()
+    );
+
+    let _ = std::fs::remove_file(&path);
 }

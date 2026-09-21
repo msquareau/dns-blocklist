@@ -1,7 +1,10 @@
+use dns_blocklist_compiler::counts;
 use dns_blocklist_compiler::downloader::DownloadOutcome;
+use dns_blocklist_compiler::run::{ReportInputs, RunStatus, build_validation_report};
 use dns_blocklist_compiler::validator::{self, ValidationError};
 use dns_blocklist_compiler::{binary, config, downloader, metadata, parser, reader};
 
+use dns_blocklist_compiler::counts::{Baseline, SourceBaseline};
 use flate2::Compression;
 use flate2::write::GzEncoder;
 use sha2::{Digest, Sha256};
@@ -9,38 +12,14 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::time::Instant;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Mode {
-    Strict,
-    BestEffort,
-}
-
-impl Mode {
-    /// Max source-level failures (download + parse) tolerated before
-    /// aborting before compilation.
-    fn max_failed_sources(self) -> usize {
-        match self {
-            Mode::Strict => 0,
-            Mode::BestEffort => 2,
-        }
-    }
-
-    fn label(self) -> &'static str {
-        match self {
-            Mode::Strict => "strict",
-            Mode::BestEffort => "best-effort",
-        }
-    }
-}
-
 struct CliArgs {
     output_dir: PathBuf,
-    mode: Mode,
+    cache_dir: PathBuf,
 }
 
 fn parse_args(args: &[String]) -> Result<CliArgs, String> {
     let mut output_dir = PathBuf::from(".");
-    let mut mode = Mode::Strict;
+    let mut cache_dir = PathBuf::from("build/cache");
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
@@ -51,13 +30,26 @@ fn parse_args(args: &[String]) -> Result<CliArgs, String> {
                 }
                 output_dir = PathBuf::from(&args[i]);
             }
-            "--strict" => mode = Mode::Strict,
-            "--best-effort" => mode = Mode::BestEffort,
+            "--cache" => {
+                i += 1;
+                if i >= args.len() {
+                    return Err("--cache requires a directory argument".into());
+                }
+                cache_dir = PathBuf::from(&args[i]);
+            }
+            flag @ ("--strict" | "--best-effort") => {
+                eprintln!(
+                    "warning: {flag} is deprecated and ignored; severity is now fixed per guard."
+                );
+            }
             unknown => return Err(format!("unknown flag: {unknown}")),
         }
         i += 1;
     }
-    Ok(CliArgs { output_dir, mode })
+    Ok(CliArgs {
+        output_dir,
+        cache_dir,
+    })
 }
 
 fn main() {
@@ -66,12 +58,12 @@ fn main() {
         Ok(c) => c,
         Err(e) => {
             eprintln!("ERROR: {e}");
-            eprintln!("Usage: dns-blocklist-compiler [--output <dir>] [--strict | --best-effort]");
+            eprintln!("Usage: dns-blocklist-compiler [--output <dir>] [--cache <dir>]");
             std::process::exit(2);
         }
     };
     let output_dir = cli.output_dir;
-    let mode = cli.mode;
+    let cache_dir = cli.cache_dir;
 
     let build_id = metadata::generate_build_id();
 
@@ -79,7 +71,7 @@ fn main() {
     println!("===============================================");
     println!("Build ID: {build_id}");
     println!("Output directory: {}", output_dir.display());
-    println!("Validation mode: {}", mode.label());
+    println!("Cache directory: {}", cache_dir.display());
     println!();
 
     // Load config
@@ -95,6 +87,19 @@ fn main() {
     println!("Loaded {} blocklist sources", config.sources.len());
     println!();
 
+    // The previous run's baseline per source: its parsed count, and whether
+    // a declared entry count was actually seen for it. A missing file reads
+    // as empty, which raises nothing — a first run and an evicted cache
+    // behave the same as a run whose counts all held steady.
+    let baseline_path = cache_dir.join("source-counts.json");
+    let previous_counts = counts::read(&baseline_path);
+    println!(
+        "Loaded {} baseline source count(s) from {}",
+        previous_counts.len(),
+        baseline_path.display()
+    );
+    println!();
+
     // Download all sources in parallel
     let results = downloader::download_all(&config);
 
@@ -107,6 +112,8 @@ fn main() {
     let mut report_source_lines: Vec<String> = Vec::new();
 
     let mut parse_failures: Vec<ValidationError> = Vec::new();
+    let mut degraded: Vec<ValidationError> = Vec::new();
+    let mut current_counts: Baseline = Baseline::new();
 
     for result in &results {
         match &result.outcome {
@@ -121,6 +128,31 @@ fn main() {
                     &mut store,
                 );
                 let parsed_total = exact_lines + wildcard_lines;
+                current_counts.insert(
+                    result.source.display_name.clone(),
+                    SourceBaseline {
+                        parsed: parsed_total,
+                        declared_count_seen: expected.is_some(),
+                    },
+                );
+                // Degraded-only: this flags a source for a person to look at
+                // without failing the run. `check_parse_degraded` runs both
+                // guards and returns at most one error, so a source whose
+                // parse falls and whose header vanishes in the same run is
+                // reported once, not twice. `source_degraded` captures the
+                // verdict here rather than having the report line re-scan
+                // `degraded` by source name below.
+                let mut source_degraded = false;
+                if let Some(e) = validator::check_parse_degraded(
+                    &result.source,
+                    parsed_total,
+                    expected,
+                    previous_counts.get(&result.source.display_name),
+                    config.build.max_parsed_drop_ratio,
+                ) {
+                    source_degraded = true;
+                    degraded.push(e);
+                }
                 let delta_str = match expected {
                     Some(exp) => {
                         let delta = parsed_total as i64 - exp as i64;
@@ -134,24 +166,19 @@ fn main() {
                             exp, parsed_total, delta, pct
                         )
                     }
-                    None => format!(
-                        "upstream: <none>, parsed: {}{}",
-                        parsed_total,
-                        match result.source.min_parsed_entries {
-                            Some(m) => format!(" (min_parsed_entries floor {})", m),
-                            None => String::new(),
-                        }
-                    ),
+                    None => format!("upstream: <none>, parsed: {parsed_total}"),
                 };
                 let verdict =
                     match validator::validate_parse(parsed_total, expected, &result.source) {
-                        Ok(()) => "OK".to_string(),
+                        Ok(()) => {
+                            if source_degraded {
+                                "DEGRADED".to_string()
+                            } else {
+                                "OK".to_string()
+                            }
+                        }
                         Err(e) => {
-                            let tag = match mode {
-                                Mode::Strict => "FAIL",
-                                Mode::BestEffort => "WARN",
-                            };
-                            let line = format!("{} ({})", tag, e);
+                            let line = format!("FAIL ({e})");
                             parse_failures.push(e);
                             line
                         }
@@ -186,26 +213,31 @@ fn main() {
     println!("Download Summary:");
     println!("  Successful: {total_downloaded}");
     println!("  Failed: {total_failed}");
-    let max_source_failures = mode.max_failed_sources();
+    if !degraded.is_empty() {
+        println!();
+        println!("Degraded ({}):", degraded.len());
+        for e in &degraded {
+            println!("  - {e}");
+            // A degraded run exits 0, so the Actions job shows the same green
+            // check as a clean run; the only other record is inside
+            // validation-report.txt. A workflow annotation surfaces it in the
+            // Actions UI without changing the exit code. Harmless outside CI.
+            eprintln!("::warning::{e}");
+        }
+    }
     let total_source_failures = total_failed + parse_failures.len();
-    if total_source_failures > max_source_failures {
+    if total_source_failures > 0 {
         eprintln!(
-            "ERROR: {} source(s) failed validation ({} download, {} parse), {}-mode threshold is {}. Aborting before compilation.",
+            "ERROR: {} source(s) failed validation ({} download, {} parse). Aborting before compilation.",
             total_source_failures,
             total_failed,
-            parse_failures.len(),
-            mode.label(),
-            max_source_failures
+            parse_failures.len()
         );
         for e in &parse_failures {
             eprintln!("  - {e}");
         }
-        std::process::exit(1);
-    }
-    if !parse_failures.is_empty() {
-        for e in &parse_failures {
-            eprintln!("WARN: {e}");
-        }
+        eprintln!("Status: {}", RunStatus::Failed.label());
+        std::process::exit(RunStatus::Failed.exit_code());
     }
     println!();
     println!(
@@ -237,22 +269,23 @@ fn main() {
             eprintln!(
                 "ERROR: Failed to load canary-domains.json: {e}. Layer 3 cannot run without it."
             );
-            std::process::exit(1);
+            eprintln!("Status: {}", RunStatus::Failed.label());
+            std::process::exit(RunStatus::Failed.exit_code());
         }
     };
     println!();
     println!("Running output validation (Layer 3)...");
     let output_errors =
         validator::validate_output(&binary_data, &canaries, &config.sources, &store, 1000);
-    let (hard_errors, soft_errors): (Vec<_>, Vec<_>) = output_errors.into_iter().partition(|e| {
+    let (hard_errors, floor_errors): (Vec<_>, Vec<_>) = output_errors.into_iter().partition(|e| {
         matches!(
             e,
             ValidationError::CanaryMissing { .. } | ValidationError::RoundTripMismatch { .. }
         )
     });
     // Canary + round-trip mismatches always abort: they indicate the artifact
-    // itself is broken, not just under-supplied. Only the per-bit
-    // TrieEntriesBelowFloor errors are downgraded in best-effort.
+    // itself is broken, not just under-supplied. Per-bit TrieEntriesBelowFloor
+    // errors abort too — every guard keeps the severity that --strict gave it.
     if !hard_errors.is_empty() {
         eprintln!(
             "ERROR: {} canary/round-trip failure(s). Aborting before publishing.",
@@ -261,36 +294,28 @@ fn main() {
         for e in &hard_errors {
             eprintln!("  - {e}");
         }
-        std::process::exit(1);
+        eprintln!("Status: {}", RunStatus::Failed.label());
+        std::process::exit(RunStatus::Failed.exit_code());
     }
-    if !soft_errors.is_empty() {
-        match mode {
-            Mode::Strict => {
-                eprintln!(
-                    "ERROR: {} per-bit floor failure(s). Aborting before publishing (strict mode).",
-                    soft_errors.len()
-                );
-                for e in &soft_errors {
-                    eprintln!("  - {e}");
-                }
-                std::process::exit(1);
-            }
-            Mode::BestEffort => {
-                for e in &soft_errors {
-                    eprintln!("WARN: {e}");
-                }
-            }
+    if !floor_errors.is_empty() {
+        eprintln!(
+            "ERROR: {} per-bit floor failure(s). Aborting before publishing.",
+            floor_errors.len()
+        );
+        for e in &floor_errors {
+            eprintln!("  - {e}");
         }
+        eprintln!("Status: {}", RunStatus::Failed.label());
+        std::process::exit(RunStatus::Failed.exit_code());
     }
     println!(
-        "  OK — {} canary domain(s) round-tripped, sample lookups passed{}.",
-        canaries.len(),
-        if soft_errors.is_empty() {
-            ", per-bit floors met"
-        } else {
-            " (per-bit floors downgraded to warnings)"
-        }
+        "  OK — {} canary domain(s) round-tripped, sample lookups passed, per-bit floors met.",
+        canaries.len()
     );
+
+    // Rewrite the baseline from this run's counts. One fall therefore reports
+    // exactly once, and the new count becomes the next run's normal.
+    counts::write(&baseline_path, &current_counts);
 
     // categoryStats: count entries in the compiled trie tagged with each bit.
     // This replaces the previous "lines parsed per source" semantics with
@@ -379,17 +404,23 @@ fn main() {
     }
     println!("Written metadata to blocklist.json");
 
+    let status = if degraded.is_empty() {
+        RunStatus::Ok
+    } else {
+        RunStatus::Degraded
+    };
+
     // Validation report — uploaded as a workflow artifact alongside the binary.
     let report_path = output_dir.join("validation-report.txt");
     let report = build_validation_report(&ReportInputs {
         build_id: &build_id,
-        mode,
+        status,
         total_sources: config.sources.len(),
         store: &store,
         source_lines: &report_source_lines,
         category_stats: &category_stats,
         canaries: &canaries,
-        soft_errors: &soft_errors,
+        degraded: &degraded,
     });
     if let Err(e) = std::fs::write(&report_path, &report) {
         eprintln!("WARN: Failed to write validation-report.txt: {e}");
@@ -402,72 +433,6 @@ fn main() {
     println!("  Binary: {}", binary_path.display());
     println!("  Metadata: {}", metadata_path.display());
     println!("  SHA256: {sha256}");
-}
-
-struct ReportInputs<'a> {
-    build_id: &'a str,
-    mode: Mode,
-    total_sources: usize,
-    store: &'a parser::DomainStore,
-    source_lines: &'a [String],
-    category_stats: &'a [metadata::CategoryStat],
-    canaries: &'a [validator::Canary],
-    soft_errors: &'a [ValidationError],
-}
-
-fn build_validation_report(r: &ReportInputs<'_>) -> String {
-    use std::fmt::Write as _;
-
-    let mut s = String::new();
-    let _ = writeln!(s, "DNS Blocklist Validation Report");
-    let _ = writeln!(s, "================================");
-    let _ = writeln!(s, "Build ID: {}", r.build_id);
-    let _ = writeln!(s, "Mode: {}", r.mode.label());
-    let _ = writeln!(s, "Sources configured: {}", r.total_sources);
-    let _ = writeln!(s, "Unique exact domains: {}", r.store.exact_domains.len());
-    let _ = writeln!(
-        s,
-        "Unique wildcard suffixes: {}",
-        r.store.wildcard_suffixes.len()
-    );
-    let _ = writeln!(s);
-    let _ = writeln!(s, "=== Per-source (Layer 1 + Layer 2) ===");
-    for line in r.source_lines {
-        let _ = writeln!(s, "{line}");
-    }
-    let _ = writeln!(s);
-    let _ = writeln!(s, "=== Layer 3 ===");
-    let _ = writeln!(s, "Canaries checked: {} (all passed)", r.canaries.len());
-    for c in r.canaries {
-        let _ = writeln!(
-            s,
-            "  {} → required bits {:#010b}",
-            c.domain, c.expected_min_bitmap
-        );
-    }
-    let _ = writeln!(s, "Round-trip sample: OK (no store-vs-trie mismatches)");
-    if r.soft_errors.is_empty() {
-        let _ = writeln!(s, "Per-bit floors: all met");
-    } else {
-        let _ = writeln!(
-            s,
-            "Per-bit floors: {} below floor (warnings)",
-            r.soft_errors.len()
-        );
-        for e in r.soft_errors {
-            let _ = writeln!(s, "  - {e}");
-        }
-    }
-    let _ = writeln!(s);
-    let _ = writeln!(s, "=== Trie-derived categoryStats ===");
-    for stat in r.category_stats {
-        let _ = writeln!(
-            s,
-            "  {} — {} exact, {} wildcard",
-            stat.name, stat.exact, stat.wildcard
-        );
-    }
-    let _ = writeln!(s);
-    let _ = writeln!(s, "Final status: SUCCESS");
-    s
+    println!("  Status: {}", status.label());
+    std::process::exit(status.exit_code());
 }

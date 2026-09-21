@@ -133,25 +133,41 @@ pub fn parse_blocklist(
     (exact_count, wildcard_count)
 }
 
-/// Extract the upstream-declared entry count from a HaGeZi blocklist header.
+/// Extract the upstream-declared entry count from a blocklist header.
 ///
-/// HaGeZi `domains/*.txt` and `adblock/*.txt` files include a comment-block line
+/// HaGeZi `domains/*.txt` and `adblock/*.txt` files carry a comment-block line
 /// of the form `# Number of entries: <N>` (or `! Number of entries: <N>` in
-/// adblock files). Walk only the leading comment/blank block — the header lives
-/// at the top — and return the parsed integer, or None if absent.
+/// adblock files). Block List Project writes `# Entries: <N>` with a thousands
+/// separator. Walk only the leading comment block — the header lives at the top
+/// — and return the parsed integer, or None if absent.
+///
+/// An adblock list opens with an `[Adblock Plus]` preamble, which is not a
+/// comment. That line is allowed once, as the first non-empty line. A later
+/// bracket line still ends the header block.
 pub fn extract_expected_entry_count(content: &str) -> Option<usize> {
+    let mut seen_first_line = false;
     for line in content.lines() {
         let trimmed = line.trim();
         if trimmed.is_empty() {
             continue;
         }
-        // First non-comment line means the header block is over; `?` returns None.
+        if !seen_first_line && trimmed.starts_with('[') {
+            seen_first_line = true;
+            continue;
+        }
+        seen_first_line = true;
+        // The first non-comment line means the header block is over.
         let body = trimmed
             .strip_prefix('#')
             .or_else(|| trimmed.strip_prefix('!'))?
             .trim();
-        if let Some(rest) = body.strip_prefix("Number of entries:") {
-            if let Ok(n) = rest.trim().parse::<usize>() {
+        let value = body
+            .strip_prefix("Number of entries:")
+            .or_else(|| body.strip_prefix("Entries:"));
+        if let Some(value) = value {
+            let token = value.split_whitespace().next().unwrap_or("");
+            let cleaned: String = token.chars().filter(|c| *c != ',' && *c != '_').collect();
+            if let Ok(n) = cleaned.parse::<usize>() {
                 return Some(n);
             }
         }
@@ -409,6 +425,55 @@ example.com
     #[test]
     fn extract_expected_entry_count_handles_empty_input() {
         assert_eq!(extract_expected_entry_count(""), None);
+    }
+
+    #[test]
+    fn extract_expected_entry_count_skips_adblock_preamble() {
+        let content = "\
+[Adblock Plus]
+! Title: HaGeZi's NSFW - blocks adult content!
+! Version: 2026.0920.0845.21
+! Number of entries: 73470
+!
+||xhamstersexvideo.com.123freedownload.com^
+";
+        assert_eq!(extract_expected_entry_count(content), Some(73470));
+    }
+
+    #[test]
+    fn extract_expected_entry_count_accepts_entries_key_with_separator() {
+        let content = "\
+# Title: Drugs Block List
+# Format: domains
+# Entries: 26,029
+# URL:
+0.0.0.0 example.com
+";
+        assert_eq!(extract_expected_entry_count(content), Some(26029));
+    }
+
+    #[test]
+    fn extract_expected_entry_count_accepts_underscore_separator() {
+        let content = "# Entries: 26_029\nexample.com\n";
+        assert_eq!(extract_expected_entry_count(content), Some(26029));
+    }
+
+    #[test]
+    fn extract_expected_entry_count_stops_at_first_content_line() {
+        let content = "example.com\n# Number of entries: 5\n";
+        assert_eq!(extract_expected_entry_count(content), None);
+    }
+
+    #[test]
+    fn extract_expected_entry_count_allows_the_bracket_line_only_first() {
+        let content = "# Title: x\n[Adblock Plus]\n# Number of entries: 5\n";
+        assert_eq!(extract_expected_entry_count(content), None);
+    }
+
+    #[test]
+    fn extract_expected_entry_count_ignores_a_non_numeric_value() {
+        let content = "# Entries: many\n# Number of entries: 42\nexample.com\n";
+        assert_eq!(extract_expected_entry_count(content), Some(42));
     }
 
     #[test]
