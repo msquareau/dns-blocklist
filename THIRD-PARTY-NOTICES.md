@@ -257,6 +257,10 @@ OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 </details>
 
+- **wasi 0.11.1+wasi-snapshot-preview1** — [repository](https://github.com/bytecodealliance/wasi)
+
+- **ring 0.17.14** — [repository](https://github.com/briansmith/ring)
+
 - **windows-sys 0.52.0** — [repository](https://github.com/microsoft/windows-rs)
 - **windows-targets 0.52.6** — [repository](https://github.com/microsoft/windows-rs)
 - **windows_aarch64_gnullvm 0.52.6** — [repository](https://github.com/microsoft/windows-rs)
@@ -690,29 +694,80 @@ The GNU General Public License does not permit incorporating your program into p
 
 ### ISC License (`ISC`)
 
-- **untrusted 0.9.0** — [repository](https://github.com/briansmith/untrusted)
+- **ring 0.17.14** — [repository](https://github.com/briansmith/ring)
 
 <details>
 <summary>Full license text</summary>
 
 ```
-// Copyright 2015-2016 Brian Smith.
-//
-// Permission to use, copy, modify, and/or distribute this software for any
-// purpose with or without fee is hereby granted, provided that the above
-// copyright notice and this permission notice appear in all copies.
-//
-// THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHORS DISCLAIM ALL WARRANTIES
-// WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-// MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR
-// ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-// WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-// ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-// OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+/* Copyright (c) 2014, Intel Corporation.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. */
+
+#ifndef OPENSSL_HEADER_EC_ECP_NISTZ384_H
+#define OPENSSL_HEADER_EC_ECP_NISTZ384_H
+
+#include "../../limbs/limbs.h"
+
+#define P384_LIMBS (384u / LIMB_BITS)
+
+typedef struct {
+  Limb X[P384_LIMBS];
+  Limb Y[P384_LIMBS];
+  Limb Z[P384_LIMBS];
+} P384_POINT;
+
+typedef struct {
+  Limb X[P384_LIMBS];
+  Limb Y[P384_LIMBS];
+} P384_POINT_AFFINE;
+
+
+#endif // OPENSSL_HEADER_EC_ECP_NISTZ384_H
 
 ```
 
 </details>
+
+- **ring 0.17.14** — [repository](https://github.com/briansmith/ring)
+
+- **untrusted 0.9.0** — [repository](https://github.com/briansmith/untrusted)
+
+- **ring 0.17.14** — [repository](https://github.com/briansmith/ring)
+
+- **ring 0.17.14** — [repository](https://github.com/briansmith/ring)
+
+- **ring 0.17.14** — [repository](https://github.com/briansmith/ring)
+
+- **ring 0.17.14** — [repository](https://github.com/briansmith/ring)
+
+- **ring 0.17.14** — [repository](https://github.com/briansmith/ring)
+
+- **ring 0.17.14** — [repository](https://github.com/briansmith/ring)
+
+- **ring 0.17.14** — [repository](https://github.com/briansmith/ring)
+
+- **ring 0.17.14** — [repository](https://github.com/briansmith/ring)
+
+- **ring 0.17.14** — [repository](https://github.com/briansmith/ring)
+
+- **ring 0.17.14** — [repository](https://github.com/briansmith/ring)
+
+- **ring 0.17.14** — [repository](https://github.com/briansmith/ring)
+
+- **ring 0.17.14** — [repository](https://github.com/briansmith/ring)
+
+- **ring 0.17.14** — [repository](https://github.com/briansmith/ring)
 
 - **ring 0.17.14** — [repository](https://github.com/briansmith/ring)
 
