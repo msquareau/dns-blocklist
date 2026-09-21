@@ -128,12 +128,26 @@ fn main() {
                 );
                 let parsed_total = exact_lines + wildcard_lines;
                 current_counts.insert(result.source.display_name.clone(), parsed_total);
+                // Both checks below are degraded-only: they flag a source for a
+                // person to look at without failing the run. `source_degraded`
+                // captures the verdict once, here, rather than having the
+                // report line re-scan `degraded` by source name below.
+                let mut source_degraded = false;
                 if let Some(e) = validator::check_parse_drop(
                     &result.source,
                     parsed_total,
                     previous_counts.get(&result.source.display_name).copied(),
                     config.build.max_parsed_drop_ratio,
                 ) {
+                    source_degraded = true;
+                    degraded.push(e);
+                }
+                if let Some(e) = validator::check_missing_declared_count(
+                    &result.source,
+                    expected,
+                    previous_counts.get(&result.source.display_name).copied(),
+                ) {
+                    source_degraded = true;
                     degraded.push(e);
                 }
                 let delta_str = match expected {
@@ -154,10 +168,7 @@ fn main() {
                 let verdict =
                     match validator::validate_parse(parsed_total, expected, &result.source) {
                         Ok(()) => {
-                            if degraded
-                                .iter()
-                                .any(|e| matches!(e, ValidationError::ParsedDrop { source, .. } if *source == result.source.display_name))
-                            {
+                            if source_degraded {
                                 "DEGRADED".to_string()
                             } else {
                                 "OK".to_string()

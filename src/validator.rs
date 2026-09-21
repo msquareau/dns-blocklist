@@ -43,6 +43,10 @@ pub enum ValidationError {
         parsed: usize,
         previous: usize,
     },
+    CountNoLongerDeclared {
+        source: String,
+        previous: usize,
+    },
     CanaryMissing {
         domain: String,
         want: u32,
@@ -113,6 +117,12 @@ impl fmt::Display for ValidationError {
                 write!(
                     f,
                     "{source}: parsed {parsed} lines, {fell:.1}% below the previous run's {previous}"
+                )
+            }
+            Self::CountNoLongerDeclared { source, previous } => {
+                write!(
+                    f,
+                    "{source}: upstream declared no entry count this run (previous baseline {previous}); the 90% guard is blind until it declares one again"
                 )
             }
             Self::CanaryMissing { domain, want, got } => {
@@ -391,6 +401,30 @@ pub fn check_parse_drop(
     None
 }
 
+/// Flag a source that had a baseline but declares no entry count this run.
+///
+/// Every source now depends on `extract_expected_entry_count` for its tight
+/// 90% parse guard, and the absolute parse floor that used to back up the
+/// six big lists is gone. If an upstream drops its header line,
+/// `validate_parse` skips the ratio check entirely — nothing degrades and
+/// nothing fails on its own. A source that quietly lost half its entries
+/// would ship with no signal. This turns that silence into a degraded entry,
+/// never a failure, so a person looks at it.
+pub fn check_missing_declared_count(
+    source: &SourceEntry,
+    expected: Option<usize>,
+    previous: Option<usize>,
+) -> Option<ValidationError> {
+    if expected.is_some() {
+        return None;
+    }
+    let previous = previous.filter(|p| *p > 0)?;
+    Some(ValidationError::CountNoLongerDeclared {
+        source: source.display_name.clone(),
+        previous,
+    })
+}
+
 pub fn validate_output_canary(
     domain: &str,
     expected_min_bitmap: u32,
@@ -569,6 +603,48 @@ mod tests {
     fn a_zero_baseline_is_not_reported() {
         let src = fixture_source();
         assert!(check_parse_drop(&src, 0, Some(0), 0.6).is_none());
+    }
+
+    #[test]
+    fn a_source_that_stops_declaring_a_count_with_a_baseline_is_degraded() {
+        let src = fixture_source();
+        let err = check_missing_declared_count(&src, None, Some(65_681)).unwrap();
+        assert!(matches!(
+            err,
+            ValidationError::CountNoLongerDeclared {
+                previous: 65_681,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn a_declared_count_is_never_flagged_as_missing() {
+        let src = fixture_source();
+        assert!(check_missing_declared_count(&src, Some(65_681), Some(65_681)).is_none());
+    }
+
+    #[test]
+    fn a_missing_count_with_no_baseline_is_not_flagged() {
+        let src = fixture_source();
+        assert!(check_missing_declared_count(&src, None, None).is_none());
+    }
+
+    #[test]
+    fn a_missing_count_with_a_zero_baseline_is_not_flagged() {
+        let src = fixture_source();
+        assert!(check_missing_declared_count(&src, None, Some(0)).is_none());
+    }
+
+    #[test]
+    fn count_no_longer_declared_display_names_the_source_and_baseline() {
+        let e = ValidationError::CountNoLongerDeclared {
+            source: "Test Source".into(),
+            previous: 65_681,
+        };
+        let s = e.to_string();
+        assert!(s.contains("Test Source"));
+        assert!(s.contains("65681"));
     }
 
     #[test]
