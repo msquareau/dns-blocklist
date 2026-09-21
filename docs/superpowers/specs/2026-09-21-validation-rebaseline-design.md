@@ -172,13 +172,17 @@ pub fn check_parse_drop(
 ) -> Option<ValidationError>;
 ```
 
-It returns `ValidationError::ParsedDrop { source, parsed, previous, fell }` when
-`1.0 - (parsed / previous) > max_drop_ratio`. It returns `None` when `previous` is absent or 0.
+It returns `ValidationError::ParsedDrop { source, parsed, previous }` when
+`1.0 - (parsed / previous) > max_drop_ratio`. It returns `None` when `previous` is absent or 0. The
+percentage fallen is not a stored field — `Display` derives it from `parsed` and `previous` at print
+time.
 
 The caller records the error as degraded. The run continues and publishes.
 
-The baseline is rewritten from this run's counts at the end of every run that reaches compilation.
-One fall therefore reports exactly once, and the new count becomes the next run's normal.
+The baseline is rewritten from this run's counts only after Layer 3 passes, not merely once
+compilation finishes — the same safety property §8 relies on to save the CI cache unconditionally. A
+run that fails Layer 3 leaves the baseline untouched, so the same fall re-reports every day until the
+artifact defect is fixed; a clean run then rewrites it, and the fall reports exactly once from there.
 
 ## 5. Layer 2 — fix the header extractor
 
@@ -322,10 +326,27 @@ These stay out of this change, and they should not drift in.
 
 A category that quietly halves no longer fails the run. The drop check covers that shape for a
 source's parse count. A fall in the finished artifact with no matching fall in the parse count would
-pass unseen between 33% and 100%.
+pass unseen between 33% and 100%. On the six sources that previously carried an artifact floor, the
+old `minTrieEntries` sat at or above the measured count, so any fall at all used to breach it; for
+those six specifically, this re-baseline widens the blind spot from near zero to 67%, which the flat
+33%-to-100% framing above does not convey on its own.
 
 The current floors convert routine upstream events into total publish outages. That is the worse
 failure.
+
+A second cost this change introduces rather than merely re-sizes: `CountRegression` is fatal, and
+for ten sources — the nine adblock lists (Fake/Phishing, NSFW, Gambling, Anti-Piracy, Social Media,
+DoH/VPN/Proxy Bypass, Dynamic DNS, URL Shorteners, Pop-up Ads) plus Block List Project Drugs — this
+guard was dormant before this change, because the header extractor returned `None` for every one of
+them. Section 5's fix makes it live, with exactly 10% headroom. The adblock parser deliberately
+discards rules containing `$`, `/` or `*`, while the upstream header counts every rule regardless of
+shape. Today each of these lists carries only plain `||domain^` rules, so none of that 10% allowance
+is already spent — but none of it is free either. If any of these ten sources' upstream rule mix
+shifts to include more than 10% of rules the parser is built to skip, this guard fires and the daily
+build hard-fails with nothing published, even though nothing is actually broken. A future failure on
+one of these ten should be diagnosed as a rule-mix shift before it is treated as a parser regression.
+This is accepted because restoring the guard is the largest single coverage gain in this change; it
+is not a reason to make the guard degraded instead.
 
 ## 12. Deferred
 
