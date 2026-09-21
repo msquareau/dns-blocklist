@@ -1,5 +1,6 @@
 use dns_blocklist_compiler::config::SourceEntry;
 use dns_blocklist_compiler::parser::{DomainStore, extract_expected_entry_count};
+use dns_blocklist_compiler::run::{ReportInputs, RunStatus, build_validation_report};
 use dns_blocklist_compiler::validator::{
     Canary, ValidationError, validate_download, validate_output, validate_parse,
 };
@@ -381,6 +382,78 @@ fn the_issue_20_symptom_exactly_199_bytes() {
             ..
         }
     ));
+}
+
+// ============================================================
+// The degraded-run wiring — spec §9's central promise, exercised end to end
+// through the library items `main` orchestrates rather than owns.
+// ============================================================
+
+#[test]
+fn a_70_percent_parse_drop_leaves_the_run_status_at_exit_code_zero() {
+    let src = source_with_floors("domains", None);
+    let mut degraded: Vec<ValidationError> = Vec::new();
+    if let Some(e) = validator::check_parse_drop(&src, 30_000, Some(100_000), 0.6) {
+        degraded.push(e);
+    }
+    assert_eq!(
+        degraded.len(),
+        1,
+        "a 70% fall against the baseline must produce exactly one ParsedDrop"
+    );
+    assert!(matches!(degraded[0], ValidationError::ParsedDrop { .. }));
+
+    // Mirrors main's status derivation: a non-empty degraded list is
+    // Degraded, never Failed — the run still publishes.
+    let status = if degraded.is_empty() {
+        RunStatus::Ok
+    } else {
+        RunStatus::Degraded
+    };
+    assert_eq!(status, RunStatus::Degraded);
+    assert_eq!(status.exit_code(), 0);
+}
+
+#[test]
+fn the_report_shows_a_degraded_section_when_something_degraded() {
+    let store = DomainStore::new();
+    let degraded = vec![ValidationError::ParsedDrop {
+        source: "Test Source".into(),
+        parsed: 30_000,
+        previous: 100_000,
+    }];
+    let report = build_validation_report(&ReportInputs {
+        build_id: "test-build",
+        status: RunStatus::Degraded,
+        total_sources: 1,
+        store: &store,
+        source_lines: &[],
+        category_stats: &[],
+        canaries: &[],
+        degraded: &degraded,
+    });
+    assert!(report.contains("Status: degraded"));
+    assert!(report.contains("=== Degraded ==="));
+    assert!(report.contains("Final status: degraded"));
+}
+
+#[test]
+fn the_report_omits_the_degraded_section_when_nothing_degraded() {
+    let store = DomainStore::new();
+    let degraded: Vec<ValidationError> = Vec::new();
+    let report = build_validation_report(&ReportInputs {
+        build_id: "test-build",
+        status: RunStatus::Ok,
+        total_sources: 1,
+        store: &store,
+        source_lines: &[],
+        category_stats: &[],
+        canaries: &[],
+        degraded: &degraded,
+    });
+    assert!(!report.contains("=== Degraded ==="));
+    assert!(!report.to_lowercase().contains("degraded"));
+    assert!(report.trim_end().ends_with("Final status: ok"));
 }
 
 #[test]
