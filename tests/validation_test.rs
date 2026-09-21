@@ -4,7 +4,7 @@ use dns_blocklist_compiler::run::{ReportInputs, RunStatus, build_validation_repo
 use dns_blocklist_compiler::validator::{
     Canary, ValidationError, validate_download, validate_output, validate_parse,
 };
-use dns_blocklist_compiler::{binary, validator};
+use dns_blocklist_compiler::{binary, counts, validator};
 
 fn source_with_floors(format: &str, min_size: Option<usize>) -> SourceEntry {
     SourceEntry {
@@ -536,4 +536,67 @@ fn every_configured_source_sets_both_floors() {
             source.display_name
         );
     }
+}
+
+// Property 1, proven through the real persistence path.
+//
+// `property_1_a_source_that_never_declares_a_count_stays_silent_forever` in
+// src/validator.rs hand-builds its second- and later-run `SourceBaseline`
+// with a helper, so it only shows that the guard is correct given a
+// `declared_count_seen: false` value — it never shows that `counts::write`
+// followed by `counts::read` actually produces that value. The persistence
+// layer is exactly where this class of bug hid before: the effect only
+// appeared from the second run onward, once a baseline had actually been
+// written and read back. This test drives `counts::write`/`counts::read`
+// for real, across three simulated runs, so the round trip itself is under
+// test, not assumed.
+#[test]
+fn a_source_with_no_header_stays_silent_across_a_real_baseline_round_trip() {
+    let src = source_with_floors("domains", None);
+    let path = std::env::temp_dir().join(format!(
+        "sdbl-validation-test-no-header-baseline-{}.json",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&path);
+
+    // Run 1: no baseline file exists yet at all.
+    let run1_baseline = counts::read(&path);
+    assert!(run1_baseline.is_empty());
+    assert!(
+        validator::check_missing_declared_count(&src, None, run1_baseline.get(&src.display_name))
+            .is_none()
+    );
+
+    // Run 1 completes. main.rs records a baseline entry for every source
+    // that downloads and parses, header or not — built here exactly the
+    // way main.rs builds it, from an `expected` that is `None`.
+    let expected: Option<usize> = None;
+    let mut run1_counts = counts::Baseline::new();
+    run1_counts.insert(
+        src.display_name.clone(),
+        counts::SourceBaseline {
+            parsed: 12_345,
+            declared_count_seen: expected.is_some(),
+        },
+    );
+    counts::write(&path, &run1_counts);
+
+    // Run 2: read the baseline back off disk — this is the value that
+    // actually survived a real serialize-and-deserialize, not a hand-built
+    // stand-in for it.
+    let run2_baseline = counts::read(&path);
+    assert!(
+        validator::check_missing_declared_count(&src, None, run2_baseline.get(&src.display_name))
+            .is_none()
+    );
+
+    // Run 3: read it again. The guard must stay silent indefinitely, not
+    // just on the first read after the write.
+    let run3_baseline = counts::read(&path);
+    assert!(
+        validator::check_missing_declared_count(&src, None, run3_baseline.get(&src.display_name))
+            .is_none()
+    );
+
+    let _ = std::fs::remove_file(&path);
 }

@@ -147,6 +147,13 @@ mod tests {
                 declared_count_seen: true,
             },
         );
+        counts.insert(
+            "NRD Feed (no header)".to_string(),
+            SourceBaseline {
+                parsed: 900,
+                declared_count_seen: false,
+            },
+        );
         write(&path, &counts);
         assert_eq!(read(&path), counts);
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
