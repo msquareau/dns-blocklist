@@ -22,6 +22,13 @@ pub fn read(path: &Path) -> BTreeMap<String, usize> {
 /// Write the baseline.
 ///
 /// A write error prints a warning and returns. It never aborts the run.
+///
+/// The write goes to a temporary file in the same directory, then renames
+/// over the target. A job cancelled mid-write leaves the temporary file
+/// truncated, not the baseline the CI cache stores — the target either keeps
+/// its previous contents or gets the new ones whole, never a half-written
+/// mix. `read` already fails open, so a cancelled write costs one baseline
+/// refresh, not a corrupt one.
 pub fn write(path: &Path, counts: &BTreeMap<String, usize>) {
     if let Some(parent) = path.parent()
         && !parent.as_os_str().is_empty()
@@ -40,11 +47,20 @@ pub fn write(path: &Path, counts: &BTreeMap<String, usize>) {
             return;
         }
     };
-    if let Err(e) = std::fs::write(path, json) {
+    let tmp_path = path.with_extension("json.tmp");
+    if let Err(e) = std::fs::write(&tmp_path, json) {
         eprintln!(
             "WARN: could not record the source-count baseline at {}: {e}",
+            tmp_path.display()
+        );
+        return;
+    }
+    if let Err(e) = std::fs::rename(&tmp_path, path) {
+        eprintln!(
+            "WARN: could not install the source-count baseline at {}: {e}",
             path.display()
         );
+        let _ = std::fs::remove_file(&tmp_path);
     }
 }
 
