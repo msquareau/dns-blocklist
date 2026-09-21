@@ -54,10 +54,6 @@ pub enum ValidationError {
         count: usize,
         min: usize,
     },
-    AggregateFailures {
-        count: usize,
-        threshold: usize,
-    },
     RoundTripMismatch {
         domain: String,
         expected: u32,
@@ -136,12 +132,6 @@ impl fmt::Display for ValidationError {
                     "{source}: trie has {count} entries with bit {bit} set, below floor {min}"
                 )
             }
-            Self::AggregateFailures { count, threshold } => {
-                write!(
-                    f,
-                    "{count} source(s) failed validation, exceeds threshold of {threshold}"
-                )
-            }
             Self::RoundTripMismatch {
                 domain,
                 expected,
@@ -178,8 +168,9 @@ pub fn load_canaries(path: &Path) -> Result<Vec<Canary>, Box<dyn std::error::Err
 
 /// Run every Layer-3 check against the just-compiled SDBL v3 binary:
 /// canary lookups, a sampled round-trip from `store`, and per-source
-/// `min_trie_entries` floors. Returns every violation discovered so the
-/// caller can decide whether to abort (strict) or warn (best-effort).
+/// `min_trie_entries` floors. Returns every violation discovered; the caller
+/// aborts before publishing on any of them — every Layer-3 guard is fatal,
+/// so there is nothing here for the caller to grade by severity.
 ///
 /// `sample_size` caps the number of exact + wildcard entries each
 /// re-checked against the trie. Pick a value large enough to catch
