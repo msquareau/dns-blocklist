@@ -25,6 +25,13 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: Restore source-count baseline
+        uses: actions/cache/restore@v5
+        with:
+          path: build/cache
+          key: sources-v1-${{ github.run_id }}
+          restore-keys: sources-v1-
+
       - name: Check formatting
         run: cargo fmt --check
 
@@ -47,8 +54,15 @@ jobs:
       - name: Generate third-party notices
         run: ./scripts/generate-third-party-notices.sh
 
-      - name: Run compiler (strict mode — fail on any validation regression)
-        run: ./target/release/dns-blocklist-compiler --output output/ --strict
+      - name: Run compiler
+        run: ./target/release/dns-blocklist-compiler --output output/ --cache build/cache
+
+      - name: Save source-count baseline
+        if: always()
+        uses: actions/cache/save@v5
+        with:
+          path: build/cache
+          key: sources-v1-${{ github.run_id }}
 
       - name: Upload validation report as workflow artifact
         if: always()

@@ -17,17 +17,27 @@ cargo build --release
 
 | Flag | Default | Description |
 |---|---|---|
-| `--output <dir>` | `.` | Where to write `blocklist.bin`, `blocklist.bin.gz`, and `blocklist.json`. |
-| `--strict` | (default) | Abort on any validation failure: bad download, parse-count regression, canary mismatch, per-bit floor breach. CI should use strict. |
-| `--best-effort` | | Tolerate up to 2 source-level (download or parse) failures and per-bit floor breaches — they downgrade to `WARN` lines. Canary mismatches and round-trip mismatches still abort because they indicate the artifact is broken, not just under-supplied. Use for local development iterations. |
+| `--output <dir>` | `.` | Where to write `blocklist.{bin,bin.gz,json}` and `validation-report.txt`. |
+| `--cache <dir>` | `build/cache` | Where to read and write `source-counts.json`, the previous run's parsed count per source. |
+| `--strict`, `--best-effort` | | Deprecated and ignored. Severity is a property of each guard. Each flag prints one warning and changes nothing. |
+
+### Run status
+
+A run ends in one of three states. The process exit code follows it.
+
+| Status | Meaning | Exit code | Publishes |
+|---|---|---:|---|
+| `ok` | every guard passed | 0 | yes |
+| `degraded` | the artifact is sound, but something needs a person to look at it | 0 | yes |
+| `failed` | the artifact is unsound, or a source produced no usable bytes | 1 | no |
 
 ### Validation layers
 
 The compiler runs three validation passes; any of them can stop a bad artifact from shipping:
 
-1. **Layer 1 — download.** HTTP status must be 2xx, body must meet the source's optional `minSizeBytes`, `Content-Type` must be `text/*` (not `text/html` / `application/json`), and the first 30 non-comment lines must contain at least one parseable domain. Retries: 3× with 1s/2s/4s ±20 % jitter for network errors and 5xx.
-2. **Layer 2 — parse.** If the source emits a HaGeZi-style `# Number of entries: N` header, parsed count must be ≥ 90 % of N. Independently, the source's optional `minParsedEntries` floor must be met.
-3. **Layer 3 — output.** The just-compiled binary is parsed back through `src/reader.rs`, every canary in [`canary-domains.json`](canary-domains.json) is looked up and its `expectedMinBitmap` bits must be present, ~1000 random store entries are round-tripped through the trie, and every source's optional `minTrieEntries` floor is checked against the trie's per-bit terminal counts.
+1. **Layer 1 — download.** HTTP status must be 2xx, body must meet the source's `minSizeBytes`, `Content-Type` must be `text/*` (not `text/html` / `application/json`), and the first 30 non-comment lines must contain at least one parseable domain. Retries: 3× with 1s/2s/4s ±20 % jitter for network errors and 5xx.
+2. **Layer 2 — parse.** If the source declares an entry count in its header, the parsed count must be at least 90 % of it. Separately, the parsed count is compared with the previous run's, read from `source-counts.json`. A fall past `maxParsedDropRatio` (default 0.6) records a **degraded** entry and the run still publishes: that check looks for partial corruption, not shrinkage. There is deliberately no absolute entry floor — an upstream list that trims itself is not a fault.
+3. **Layer 3 — output.** The just-compiled binary is parsed back through `src/reader.rs`, every canary in [`canary-domains.json`](canary-domains.json) is looked up and its `expectedMinBitmap` bits must be present, ~1000 random store entries are round-tripped through the trie, and every source's `minTrieEntries` floor is checked against the trie's per-bit terminal counts.
 
 ## Testing
 
@@ -42,7 +52,7 @@ The test suite covers:
 
 - **Inline unit tests** in every `src/*.rs` module — parser formats, trie serialization, header encoding, metadata generation, config deserialization, SDBL reader, the three validation layers.
 - **`tests/integration_test.rs`** — end-to-end compilation through the SDBL v3 reader to verify domain lookups, category bitmaps, wildcard handling, determinism, and gzip round-trips.
-- **`tests/validation_test.rs`** — the issue-#20 regression suite: HTTP 404, 500, too-small body, `text/html` rejection, smell-test rejection of HTML error pages, parse-count ratio guard, `minParsedEntries` floor, canary mismatch (including the literal "Ultimate bit 4 dropped" symptom), per-bit trie-entry floor, round-trip sampling.
+- **`tests/validation_test.rs`** — the issue-#20 regression suite: HTTP 404, 500, too-small body, `text/html` rejection, smell-test rejection of HTML error pages, parse-count ratio guard, canary mismatch (including the literal "Ultimate bit 4 dropped" symptom), per-bit trie-entry floor, round-trip sampling.
 - **`tests/download_integration_test.rs`** — two `#[ignore]`d live-download tests gated behind `cargo test -- --ignored`; run in the release workflow.
 
 ## How It Works
@@ -101,9 +111,11 @@ All blocklist sources are defined in [`blocklist-sources.json`](blocklist-source
 | `baseUrl` | yes | Key into `baseUrls` — the download URL is `baseUrls[baseUrl]/file` |
 | `format` | yes | List format: `domains`, `hosts`, or `adblock` (see below) |
 | `displayName` | yes | Human-readable name shown in build output |
-| `minSizeBytes` | optional | Layer 1 — reject downloads smaller than this many bytes. Set ~80 % of the current upstream size. |
-| `minParsedEntries` | optional | Layer 2 — reject parses producing fewer than this many entries (line count). Independent of the upstream's declared count. |
-| `minTrieEntries` | optional | Layer 3 — abort if the compiled trie has fewer than this many entries with this source's bit set. |
+| `minSizeBytes` | required | Layer 1 — reject a download smaller than this. Set to one third of the measured body size. It rejects a truncated or empty download; it does not detect an upstream trim. |
+| `minTrieEntries` | required | Layer 3 — abort if the compiled trie holds fewer than this many entries with this source's bit set. Set to one third of the measured count. It catches a builder defect that empties a category after a clean parse. |
+| `build.maxParsedDropRatio` | optional, default `0.6` | Layer 2 — the fraction a source's parsed count may fall against the previous run before the run records a degraded entry. |
+
+A floor never rises when it is recalibrated against a fresh measurement: if the current value is already lower than one third of the new count, the current value stays.
 
 ### Supported Formats
 
