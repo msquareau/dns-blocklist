@@ -1,5 +1,6 @@
 pub mod binary;
 pub mod config;
+pub mod counts;
 pub mod downloader;
 pub mod metadata;
 pub mod parser;
