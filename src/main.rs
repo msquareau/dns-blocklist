@@ -134,14 +134,7 @@ fn main() {
                             exp, parsed_total, delta, pct
                         )
                     }
-                    None => format!(
-                        "upstream: <none>, parsed: {}{}",
-                        parsed_total,
-                        match result.source.min_parsed_entries {
-                            Some(m) => format!(" (min_parsed_entries floor {})", m),
-                            None => String::new(),
-                        }
-                    ),
+                    None => format!("upstream: <none>, parsed: {parsed_total}"),
                 };
                 let verdict =
                     match validator::validate_parse(parsed_total, expected, &result.source) {

@@ -14,7 +14,6 @@ fn source_with_floors(format: &str, min_size: Option<usize>) -> SourceEntry {
         format: format.into(),
         display_name: "HaGeZi Ultimate (test)".into(),
         min_size_bytes: min_size,
-        min_parsed_entries: None,
         min_trie_entries: None,
     }
 }
@@ -126,7 +125,6 @@ fn accepts_healthy_adblock_format() {
         format: "adblock".into(),
         display_name: "HaGeZi Fake/Phishing".into(),
         min_size_bytes: Some(50),
-        min_parsed_entries: None,
         min_trie_entries: None,
     };
     let body = "\
@@ -139,23 +137,9 @@ fn accepts_healthy_adblock_format() {
     validate_download(200, Some("text/plain"), body, &src).unwrap();
 }
 
-fn source_with_parse_floor(min_parsed: Option<usize>) -> SourceEntry {
-    SourceEntry {
-        category: "adsTrackersUltimate".into(),
-        category_index: 4,
-        file: "ultimate.txt".into(),
-        base_url: "domains".into(),
-        format: "domains".into(),
-        display_name: "HaGeZi Ultimate (test)".into(),
-        min_size_bytes: None,
-        min_parsed_entries: min_parsed,
-        min_trie_entries: None,
-    }
-}
-
 #[test]
 fn parse_ratio_below_90_percent_is_regression() {
-    let src = source_with_parse_floor(None);
+    let src = source_with_floors("domains", None);
     // declared 657403, parsed 1 — the exact issue-#20 symptom
     let err = validate_parse(1, Some(657403), &src).unwrap_err();
     match err {
@@ -171,45 +155,21 @@ fn parse_ratio_below_90_percent_is_regression() {
 
 #[test]
 fn parse_ratio_at_exact_90_percent_passes() {
-    let src = source_with_parse_floor(None);
+    let src = source_with_floors("domains", None);
     // 0.9 * 100000 = 90000 exactly
     validate_parse(90_000, Some(100_000), &src).unwrap();
 }
 
 #[test]
 fn parse_ratio_just_below_90_percent_fails() {
-    let src = source_with_parse_floor(None);
+    let src = source_with_floors("domains", None);
     let err = validate_parse(89_999, Some(100_000), &src).unwrap_err();
     assert!(matches!(err, ValidationError::CountRegression { .. }));
 }
 
 #[test]
-fn min_parsed_entries_floor_applies_when_no_upstream_header() {
-    let src = source_with_parse_floor(Some(1000));
-    let err = validate_parse(500, None, &src).unwrap_err();
-    match err {
-        ValidationError::BelowFloor { parsed, min, .. } => {
-            assert_eq!(parsed, 500);
-            assert_eq!(min, 1000);
-        }
-        other => panic!("expected BelowFloor, got {other:?}"),
-    }
-}
-
-#[test]
-fn min_parsed_entries_floor_also_applies_with_upstream_header() {
-    // Both checks apply: ratio passes (95000 / 100000 = 95%), but absolute floor fails.
-    let src = source_with_parse_floor(Some(150_000));
-    let err = validate_parse(95_000, Some(100_000), &src).unwrap_err();
-    assert!(matches!(
-        err,
-        ValidationError::BelowFloor { min: 150_000, .. }
-    ));
-}
-
-#[test]
 fn parse_unconstrained_zero_still_fails() {
-    let src = source_with_parse_floor(None);
+    let src = source_with_floors("domains", None);
     let err = validate_parse(0, None, &src).unwrap_err();
     assert!(matches!(err, ValidationError::BelowFloor { parsed: 0, .. }));
 }
@@ -244,7 +204,6 @@ fn source_with_trie_floor(category_index: u8, min_trie: Option<usize>) -> Source
         format: "domains".into(),
         display_name: format!("Source {category_index}"),
         min_size_bytes: None,
-        min_parsed_entries: None,
         min_trie_entries: min_trie,
     }
 }

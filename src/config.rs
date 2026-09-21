@@ -2,6 +2,30 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::Path;
 
+/// Build-wide validation settings. The block is optional, so a config written
+/// before it existed still loads.
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct BuildSettings {
+    /// The fraction a source's parsed count may fall against the previous run
+    /// before the run records a degraded entry. It sits far above a normal
+    /// upstream consolidation on purpose.
+    #[serde(default = "default_max_parsed_drop_ratio")]
+    pub max_parsed_drop_ratio: f64,
+}
+
+fn default_max_parsed_drop_ratio() -> f64 {
+    0.6
+}
+
+impl Default for BuildSettings {
+    fn default() -> Self {
+        Self {
+            max_parsed_drop_ratio: default_max_parsed_drop_ratio(),
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[allow(dead_code)]
@@ -10,6 +34,8 @@ pub struct SourcesConfig {
     pub description: String,
     pub base_urls: HashMap<String, String>,
     pub sources: Vec<SourceEntry>,
+    #[serde(default)]
+    pub build: BuildSettings,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -23,8 +49,6 @@ pub struct SourceEntry {
     pub display_name: String,
     #[serde(default)]
     pub min_size_bytes: Option<usize>,
-    #[serde(default)]
-    pub min_parsed_entries: Option<usize>,
     #[serde(default)]
     pub min_trie_entries: Option<usize>,
 }
@@ -66,6 +90,31 @@ mod tests {
     fn test_load_config_file_not_found() {
         let result = load_config(Path::new("/nonexistent/path/blocklist-sources.json"));
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn build_settings_default_to_a_zero_point_six_drop_ratio() {
+        let json = r#"{
+            "version": 1,
+            "description": "No build block",
+            "baseUrls": {},
+            "sources": []
+        }"#;
+        let config: SourcesConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.build.max_parsed_drop_ratio, 0.6);
+    }
+
+    #[test]
+    fn build_settings_read_an_explicit_drop_ratio() {
+        let json = r#"{
+            "version": 1,
+            "description": "Explicit build block",
+            "baseUrls": {},
+            "sources": [],
+            "build": {"maxParsedDropRatio": 0.25}
+        }"#;
+        let config: SourcesConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.build.max_parsed_drop_ratio, 0.25);
     }
 
     #[test]

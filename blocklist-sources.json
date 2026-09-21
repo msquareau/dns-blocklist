@@ -18,7 +18,6 @@
       "format": "domains",
       "displayName": "HaGeZi Light",
       "minSizeBytes": 1500000,
-      "minParsedEntries": 75000,
       "minTrieEntries": 75000
     },
     {
@@ -29,7 +28,6 @@
       "format": "domains",
       "displayName": "HaGeZi Multi",
       "minSizeBytes": 6500000,
-      "minParsedEntries": 260000,
       "minTrieEntries": 260000
     },
     {
@@ -40,7 +38,6 @@
       "format": "domains",
       "displayName": "HaGeZi Pro",
       "minSizeBytes": 10000000,
-      "minParsedEntries": 360000,
       "minTrieEntries": 360000
     },
     {
@@ -51,7 +48,6 @@
       "format": "domains",
       "displayName": "HaGeZi Pro++",
       "minSizeBytes": 11500000,
-      "minParsedEntries": 420000,
       "minTrieEntries": 420000
     },
     {
@@ -62,7 +58,6 @@
       "format": "domains",
       "displayName": "HaGeZi Ultimate",
       "minSizeBytes": 13500000,
-      "minParsedEntries": 520000,
       "minTrieEntries": 520000
     },
     {
@@ -73,7 +68,6 @@
       "format": "domains",
       "displayName": "HaGeZi Threat Intelligence",
       "minSizeBytes": 16500000,
-      "minParsedEntries": 900000,
       "minTrieEntries": 900000
     },
     {
@@ -260,5 +254,8 @@
       "format": "domains",
       "displayName": "Block List Project Drugs"
     }
-  ]
+  ],
+  "build": {
+    "maxParsedDropRatio": 0.6
+  }
 }

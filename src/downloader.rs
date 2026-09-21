@@ -187,7 +187,6 @@ mod tests {
             format: "domains".to_string(),
             display_name: format!("Test {}", category),
             min_size_bytes: None,
-            min_parsed_entries: None,
             min_trie_entries: None,
         }
     }

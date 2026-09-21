@@ -101,10 +101,7 @@ impl fmt::Display for ValidationError {
                 parsed,
                 min,
             } => {
-                write!(
-                    f,
-                    "{source}: parsed {parsed} below min_parsed_entries {min}"
-                )
+                write!(f, "{source}: parsed {parsed} below the minimum of {min}")
             }
             Self::CanaryMissing { domain, want, got } => {
                 write!(
@@ -322,11 +319,15 @@ fn looks_like_domain_list(body: &str, format: &str) -> bool {
     exact + wildcard > 0
 }
 
-/// Validate the parser's output against (a) the upstream-declared entry count
-/// (90 % floor) and (b) the source's optional `min_parsed_entries` floor.
-/// The 90 % allowance lets the parser legitimately drop `localhost`, IPv4
-/// addresses, malformed labels etc. while still catching the issue-#20 case
-/// (657403 declared → 1 parsed).
+/// Validate the parser's output against the upstream-declared entry count
+/// (90 % floor). The 90 % allowance lets the parser legitimately drop
+/// `localhost`, IPv4 addresses, malformed labels etc. while still catching the
+/// issue-#20 case (657403 declared → 1 parsed).
+///
+/// There is deliberately no absolute entry floor here. An upstream list that
+/// trims itself is not a fault, and a hand-written floor turns that routine
+/// event into a total publish outage. The shrink signal lives in
+/// `check_parse_drop`, which is relative and never fatal.
 pub fn validate_parse(
     parsed: usize,
     expected: Option<usize>,
@@ -344,16 +345,7 @@ pub fn validate_parse(
             });
         }
     }
-    if let Some(min) = source.min_parsed_entries
-        && parsed < min
-    {
-        return Err(ValidationError::BelowFloor {
-            source: source.display_name.clone(),
-            parsed,
-            min,
-        });
-    }
-    if expected.is_none() && source.min_parsed_entries.is_none() && parsed == 0 {
+    if parsed == 0 {
         return Err(ValidationError::BelowFloor {
             source: source.display_name.clone(),
             parsed,
@@ -392,7 +384,6 @@ mod tests {
             format: "domains".into(),
             display_name: "Test Source".into(),
             min_size_bytes: None,
-            min_parsed_entries: None,
             min_trie_entries: None,
         }
     }
@@ -432,6 +423,28 @@ mod tests {
         let src = fixture_source();
         validate_parse(1, None, &src).unwrap();
         validate_parse(657403, Some(657403), &src).unwrap();
+    }
+
+    #[test]
+    fn parse_with_no_declared_count_and_no_entries_still_fails() {
+        let src = fixture_source();
+        let err = validate_parse(0, None, &src).unwrap_err();
+        assert!(matches!(
+            err,
+            ValidationError::BelowFloor {
+                parsed: 0,
+                min: 1,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn a_shrunken_source_that_matches_its_header_passes() {
+        // The 2026-09-21 HaGeZi Light case: upstream trimmed the list and the
+        // parse matched the new header exactly. No floor may reject this.
+        let src = fixture_source();
+        validate_parse(65681, Some(65681), &src).unwrap();
     }
 
     #[test]
