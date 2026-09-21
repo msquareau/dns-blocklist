@@ -429,6 +429,7 @@ fn main() {
         source_lines: &report_source_lines,
         category_stats: &category_stats,
         canaries: &canaries,
+        degraded: &degraded,
     });
     if let Err(e) = std::fs::write(&report_path, &report) {
         eprintln!("WARN: Failed to write validation-report.txt: {e}");
@@ -453,6 +454,7 @@ struct ReportInputs<'a> {
     source_lines: &'a [String],
     category_stats: &'a [metadata::CategoryStat],
     canaries: &'a [validator::Canary],
+    degraded: &'a [ValidationError],
 }
 
 fn build_validation_report(r: &ReportInputs<'_>) -> String {
@@ -474,6 +476,17 @@ fn build_validation_report(r: &ReportInputs<'_>) -> String {
     let _ = writeln!(s, "=== Per-source (Layer 1 + Layer 2) ===");
     for line in r.source_lines {
         let _ = writeln!(s, "{line}");
+    }
+    if !r.degraded.is_empty() {
+        let _ = writeln!(s);
+        let _ = writeln!(s, "=== Degraded ===");
+        let _ = writeln!(
+            s,
+            "The artifact is sound. Each entry below needs a person to look at it."
+        );
+        for e in r.degraded {
+            let _ = writeln!(s, "  - {e}");
+        }
     }
     let _ = writeln!(s);
     let _ = writeln!(s, "=== Layer 3 ===");
@@ -497,6 +510,6 @@ fn build_validation_report(r: &ReportInputs<'_>) -> String {
         );
     }
     let _ = writeln!(s);
-    let _ = writeln!(s, "Final status: SUCCESS");
+    let _ = writeln!(s, "Final status: {}", r.status.label());
     s
 }
