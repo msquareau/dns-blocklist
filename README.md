@@ -113,9 +113,14 @@ All blocklist sources are defined in [`blocklist-sources.json`](blocklist-source
 | `displayName` | yes | Human-readable name shown in build output |
 | `minSizeBytes` | required | Layer 1 — reject a download smaller than this. Set to one third of the measured body size. It rejects a truncated or empty download; it does not detect an upstream trim. |
 | `minTrieEntries` | required | Layer 3 — abort if the compiled trie holds fewer than this many entries with this source's bit set. Set to one third of the measured count. It catches a builder defect that empties a category after a clean parse. |
-| `build.maxParsedDropRatio` | optional, default `0.6` | Layer 2 — the fraction a source's parsed count may fall against the previous run before the run records a degraded entry. |
 
 A floor never rises when it is recalibrated against a fresh measurement: if the current value is already lower than one third of the new count, the current value stays.
+
+**The `build` block** (top-level, not a source field):
+
+| Field | Description |
+|-------|-------------|
+| `build.maxParsedDropRatio` | Optional, default `0.6`. Layer 2 — the fraction a source's parsed count may fall against the previous run before the run records a degraded entry. |
 
 ### Supported Formats
 
