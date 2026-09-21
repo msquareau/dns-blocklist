@@ -1,3 +1,4 @@
+use dns_blocklist_compiler::counts;
 use dns_blocklist_compiler::downloader::DownloadOutcome;
 use dns_blocklist_compiler::validator::{self, ValidationError};
 use dns_blocklist_compiler::{binary, config, downloader, metadata, parser, reader};
@@ -5,6 +6,7 @@ use dns_blocklist_compiler::{binary, config, downloader, metadata, parser, reade
 use flate2::Compression;
 use flate2::write::GzEncoder;
 use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -17,9 +19,6 @@ use std::time::Instant;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum RunStatus {
     Ok,
-    // Constructed starting in Task 6, once a guard can downgrade a run
-    // instead of aborting it.
-    #[allow(dead_code)]
     Degraded,
     Failed,
 }
@@ -116,6 +115,18 @@ fn main() {
     println!("Loaded {} blocklist sources", config.sources.len());
     println!();
 
+    // The previous run's parsed count per source. A missing file reads as
+    // empty, which raises nothing — a first run and an evicted cache behave
+    // the same as a run whose counts all held steady.
+    let baseline_path = cache_dir.join("source-counts.json");
+    let previous_counts = counts::read(&baseline_path);
+    println!(
+        "Loaded {} baseline source count(s) from {}",
+        previous_counts.len(),
+        baseline_path.display()
+    );
+    println!();
+
     // Download all sources in parallel
     let results = downloader::download_all(&config);
 
@@ -128,6 +139,8 @@ fn main() {
     let mut report_source_lines: Vec<String> = Vec::new();
 
     let mut parse_failures: Vec<ValidationError> = Vec::new();
+    let mut degraded: Vec<ValidationError> = Vec::new();
+    let mut current_counts: BTreeMap<String, usize> = BTreeMap::new();
 
     for result in &results {
         match &result.outcome {
@@ -142,6 +155,15 @@ fn main() {
                     &mut store,
                 );
                 let parsed_total = exact_lines + wildcard_lines;
+                current_counts.insert(result.source.display_name.clone(), parsed_total);
+                if let Some(e) = validator::check_parse_drop(
+                    &result.source,
+                    parsed_total,
+                    previous_counts.get(&result.source.display_name).copied(),
+                    config.build.max_parsed_drop_ratio,
+                ) {
+                    degraded.push(e);
+                }
                 let delta_str = match expected {
                     Some(exp) => {
                         let delta = parsed_total as i64 - exp as i64;
@@ -159,7 +181,16 @@ fn main() {
                 };
                 let verdict =
                     match validator::validate_parse(parsed_total, expected, &result.source) {
-                        Ok(()) => "OK".to_string(),
+                        Ok(()) => {
+                            if degraded
+                                .iter()
+                                .any(|e| matches!(e, ValidationError::ParsedDrop { source, .. } if *source == result.source.display_name))
+                            {
+                                "DEGRADED".to_string()
+                            } else {
+                                "OK".to_string()
+                            }
+                        }
                         Err(e) => {
                             let line = format!("FAIL ({e})");
                             parse_failures.push(e);
@@ -196,6 +227,13 @@ fn main() {
     println!("Download Summary:");
     println!("  Successful: {total_downloaded}");
     println!("  Failed: {total_failed}");
+    if !degraded.is_empty() {
+        println!();
+        println!("Degraded ({}):", degraded.len());
+        for e in &degraded {
+            println!("  - {e}");
+        }
+    }
     let total_source_failures = total_failed + parse_failures.len();
     if total_source_failures > 0 {
         eprintln!(
@@ -284,6 +322,10 @@ fn main() {
         canaries.len()
     );
 
+    // Rewrite the baseline from this run's counts. One fall therefore reports
+    // exactly once, and the new count becomes the next run's normal.
+    counts::write(&baseline_path, &current_counts);
+
     // categoryStats: count entries in the compiled trie tagged with each bit.
     // This replaces the previous "lines parsed per source" semantics with
     // "unique domains tagged with this category" — what consumers actually
@@ -371,11 +413,17 @@ fn main() {
     }
     println!("Written metadata to blocklist.json");
 
+    let status = if degraded.is_empty() {
+        RunStatus::Ok
+    } else {
+        RunStatus::Degraded
+    };
+
     // Validation report — uploaded as a workflow artifact alongside the binary.
     let report_path = output_dir.join("validation-report.txt");
     let report = build_validation_report(&ReportInputs {
         build_id: &build_id,
-        status: RunStatus::Ok,
+        status,
         total_sources: config.sources.len(),
         store: &store,
         source_lines: &report_source_lines,
@@ -393,6 +441,8 @@ fn main() {
     println!("  Binary: {}", binary_path.display());
     println!("  Metadata: {}", metadata_path.display());
     println!("  SHA256: {sha256}");
+    println!("  Status: {}", status.label());
+    std::process::exit(status.exit_code());
 }
 
 struct ReportInputs<'a> {
