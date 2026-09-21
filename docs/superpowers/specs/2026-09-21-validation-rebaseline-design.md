@@ -54,11 +54,10 @@ word, unless a canary happens to cover it.
 Together these mean 10 sources have no upstream comparison and no floor. The only remaining guard is
 `parsed == 0`. A source truncated to a single domain ships.
 
-## 2. Prior art
+## 2. Adopted model
 
-`alpaca-blocklists-builder` solved the same problem first. Its design
-(`docs/superpowers/specs/2026-09-17-source-health-and-backfill-design.md`) removed the absolute
-parse floor and replaced the shrink signal with a relative check. This design ports that model.
+A relative, previous-run comparison that replaces an absolute parse floor is a proven model, and
+this design adopts it wholesale.
 
 Three decisions carry over:
 
@@ -67,7 +66,7 @@ Three decisions carry over:
    rather than an upstream trim. Each floor is re-baselined to one third of its measured count.
 3. The shrink signal becomes relative to the previous run, and it is never fatal.
 
-Its stated ladder:
+The ladder:
 
 > 1. A fall below 60% stays silent. That is normal growth or an upstream cleanup.
 > 2. A fall of 60% to 67% records a degraded entry, and the run still publishes.
@@ -314,10 +313,9 @@ Inline unit tests in `src/validator.rs`, `src/parser.rs` and `src/counts.rs`:
 These stay out of this change, and they should not drift in.
 
 - **No source URL change, no category change, no SDBL v3 format change.**
-- **No mirror tier and no byte cache.** `alpaca-blocklists-builder` can treat "no bytes anywhere" as
-  fatal because it holds four URL tiers and a last-good cache behind each source. This repo has one
-  URL per source and no cache. A dead upstream still fails the daily run here, exactly as it does
-  today. That gap is real and it is larger than this change.
+- **No mirror tier and no byte cache.** This repository holds one URL per source and no byte cache,
+  so a dead upstream still fails the daily run, exactly as it does today. Closing that gap is larger
+  than this change.
 - **No object-store cache.** The baseline is small and it belongs beside the run that writes it.
 
 ## 11. Accepted cost
