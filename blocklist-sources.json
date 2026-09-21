@@ -17,8 +17,8 @@
       "baseUrl": "domains",
       "format": "domains",
       "displayName": "HaGeZi Light",
-      "minSizeBytes": 1500000,
-      "minTrieEntries": 75000
+      "minSizeBytes": 500000,
+      "minTrieEntries": 21000
     },
     {
       "category": "adsTrackersNormal",
@@ -27,8 +27,8 @@
       "baseUrl": "domains",
       "format": "domains",
       "displayName": "HaGeZi Multi",
-      "minSizeBytes": 6500000,
-      "minTrieEntries": 260000
+      "minSizeBytes": 6100000,
+      "minTrieEntries": 180000
     },
     {
       "category": "adsTrackersPro",
@@ -37,8 +37,8 @@
       "baseUrl": "domains",
       "format": "domains",
       "displayName": "HaGeZi Pro",
-      "minSizeBytes": 10000000,
-      "minTrieEntries": 360000
+      "minSizeBytes": 6800000,
+      "minTrieEntries": 210000
     },
     {
       "category": "adsTrackersProPlus",
@@ -47,8 +47,8 @@
       "baseUrl": "domains",
       "format": "domains",
       "displayName": "HaGeZi Pro++",
-      "minSizeBytes": 11500000,
-      "minTrieEntries": 420000
+      "minSizeBytes": 7200000,
+      "minTrieEntries": 220000
     },
     {
       "category": "adsTrackersUltimate",
@@ -57,8 +57,8 @@
       "baseUrl": "domains",
       "format": "domains",
       "displayName": "HaGeZi Ultimate",
-      "minSizeBytes": 13500000,
-      "minTrieEntries": 520000
+      "minSizeBytes": 7600000,
+      "minTrieEntries": 240000
     },
     {
       "category": "threatIntelligence",
@@ -67,7 +67,7 @@
       "baseUrl": "domains",
       "format": "domains",
       "displayName": "HaGeZi Threat Intelligence",
-      "minSizeBytes": 16500000,
+      "minSizeBytes": 16000000,
       "minTrieEntries": 900000
     },
     {
@@ -76,7 +76,9 @@
       "file": "nrd7.txt",
       "baseUrl": "nrd",
       "format": "domains",
-      "displayName": "HaGeZi NRD (7 days)"
+      "displayName": "HaGeZi NRD (7 days)",
+      "minSizeBytes": 19000000,
+      "minTrieEntries": 1200000
     },
     {
       "category": "dgaDetection",
@@ -84,7 +86,9 @@
       "file": "dga7.txt",
       "baseUrl": "nrd",
       "format": "domains",
-      "displayName": "HaGeZi DGA (7 days)"
+      "displayName": "HaGeZi DGA (7 days)",
+      "minSizeBytes": 4700000,
+      "minTrieEntries": 200000
     },
     {
       "category": "malwarePhishing",
@@ -92,7 +96,9 @@
       "file": "fake.txt",
       "baseUrl": "adblock",
       "format": "adblock",
-      "displayName": "HaGeZi Fake/Phishing"
+      "displayName": "HaGeZi Fake/Phishing",
+      "minSizeBytes": 110000,
+      "minTrieEntries": 5700
     },
     {
       "category": "adultContent",
@@ -100,7 +106,9 @@
       "file": "nsfw.txt",
       "baseUrl": "adblock",
       "format": "adblock",
-      "displayName": "HaGeZi NSFW"
+      "displayName": "HaGeZi NSFW",
+      "minSizeBytes": 450000,
+      "minTrieEntries": 24000
     },
     {
       "category": "gambling",
@@ -108,7 +116,9 @@
       "file": "gambling.txt",
       "baseUrl": "adblock",
       "format": "adblock",
-      "displayName": "HaGeZi Gambling"
+      "displayName": "HaGeZi Gambling",
+      "minSizeBytes": 3500000,
+      "minTrieEntries": 170000
     },
     {
       "category": "piracy",
@@ -116,7 +126,9 @@
       "file": "anti.piracy.txt",
       "baseUrl": "adblock",
       "format": "adblock",
-      "displayName": "HaGeZi Anti-Piracy"
+      "displayName": "HaGeZi Anti-Piracy",
+      "minSizeBytes": 380000,
+      "minTrieEntries": 17000
     },
     {
       "category": "socialNetworksAll",
@@ -124,7 +136,9 @@
       "file": "social.txt",
       "baseUrl": "adblock",
       "format": "adblock",
-      "displayName": "HaGeZi Social Media"
+      "displayName": "HaGeZi Social Media",
+      "minSizeBytes": 5700,
+      "minTrieEntries": 300
     },
     {
       "category": "appleTracker",
@@ -132,7 +146,9 @@
       "file": "native.apple.txt",
       "baseUrl": "domains",
       "format": "domains",
-      "displayName": "HaGeZi Apple Tracking"
+      "displayName": "HaGeZi Apple Tracking",
+      "minSizeBytes": 1200,
+      "minTrieEntries": 38
     },
     {
       "category": "amazonTracker",
@@ -140,7 +156,9 @@
       "file": "native.amazon.txt",
       "baseUrl": "domains",
       "format": "domains",
-      "displayName": "HaGeZi Amazon Tracking"
+      "displayName": "HaGeZi Amazon Tracking",
+      "minSizeBytes": 8800,
+      "minTrieEntries": 230
     },
     {
       "category": "microsoftTracker",
@@ -148,7 +166,9 @@
       "file": "native.winoffice.txt",
       "baseUrl": "domains",
       "format": "domains",
-      "displayName": "HaGeZi Microsoft Tracking"
+      "displayName": "HaGeZi Microsoft Tracking",
+      "minSizeBytes": 8500,
+      "minTrieEntries": 240
     },
     {
       "category": "samsungTracker",
@@ -156,7 +176,9 @@
       "file": "native.samsung.txt",
       "baseUrl": "domains",
       "format": "domains",
-      "displayName": "HaGeZi Samsung Tracking"
+      "displayName": "HaGeZi Samsung Tracking",
+      "minSizeBytes": 2700,
+      "minTrieEntries": 89
     },
     {
       "category": "xiaomiTracker",
@@ -164,7 +186,9 @@
       "file": "native.xiaomi.txt",
       "baseUrl": "domains",
       "format": "domains",
-      "displayName": "HaGeZi Xiaomi Tracking"
+      "displayName": "HaGeZi Xiaomi Tracking",
+      "minSizeBytes": 4100,
+      "minTrieEntries": 150
     },
     {
       "category": "huaweiTracker",
@@ -172,7 +196,9 @@
       "file": "native.huawei.txt",
       "baseUrl": "domains",
       "format": "domains",
-      "displayName": "HaGeZi Huawei Tracking"
+      "displayName": "HaGeZi Huawei Tracking",
+      "minSizeBytes": 2200,
+      "minTrieEntries": 56
     },
     {
       "category": "lgTracker",
@@ -180,7 +206,9 @@
       "file": "native.lgwebos.txt",
       "baseUrl": "domains",
       "format": "domains",
-      "displayName": "HaGeZi LG Tracking"
+      "displayName": "HaGeZi LG Tracking",
+      "minSizeBytes": 14000,
+      "minTrieEntries": 650
     },
     {
       "category": "rokuTracker",
@@ -188,7 +216,9 @@
       "file": "native.roku.txt",
       "baseUrl": "domains",
       "format": "domains",
-      "displayName": "HaGeZi Roku Tracking"
+      "displayName": "HaGeZi Roku Tracking",
+      "minSizeBytes": 1500,
+      "minTrieEntries": 54
     },
     {
       "category": "tiktok",
@@ -196,7 +226,9 @@
       "file": "native.tiktok.txt",
       "baseUrl": "domains",
       "format": "domains",
-      "displayName": "HaGeZi TikTok"
+      "displayName": "HaGeZi TikTok",
+      "minSizeBytes": 4400,
+      "minTrieEntries": 140
     },
     {
       "category": "tiktokExtended",
@@ -204,7 +236,9 @@
       "file": "native.tiktok.extended.txt",
       "baseUrl": "domains",
       "format": "domains",
-      "displayName": "HaGeZi TikTok Extended"
+      "displayName": "HaGeZi TikTok Extended",
+      "minSizeBytes": 6300,
+      "minTrieEntries": 200
     },
     {
       "category": "bypassPrevention",
@@ -212,7 +246,9 @@
       "file": "doh-vpn-proxy-bypass.txt",
       "baseUrl": "adblock",
       "format": "adblock",
-      "displayName": "HaGeZi DoH/VPN/Proxy Bypass"
+      "displayName": "HaGeZi DoH/VPN/Proxy Bypass",
+      "minSizeBytes": 110000,
+      "minTrieEntries": 5400
     },
     {
       "category": "dohOnly",
@@ -220,7 +256,9 @@
       "file": "doh.txt",
       "baseUrl": "domains",
       "format": "domains",
-      "displayName": "HaGeZi DoH Only"
+      "displayName": "HaGeZi DoH Only",
+      "minSizeBytes": 22000,
+      "minTrieEntries": 1200
     },
     {
       "category": "dynamicDNS",
@@ -228,7 +266,9 @@
       "file": "dyndns.txt",
       "baseUrl": "adblock",
       "format": "adblock",
-      "displayName": "HaGeZi Dynamic DNS"
+      "displayName": "HaGeZi Dynamic DNS",
+      "minSizeBytes": 8300,
+      "minTrieEntries": 510
     },
     {
       "category": "urlShorteners",
@@ -236,7 +276,9 @@
       "file": "urlshortener.txt",
       "baseUrl": "adblock",
       "format": "adblock",
-      "displayName": "HaGeZi URL Shorteners"
+      "displayName": "HaGeZi URL Shorteners",
+      "minSizeBytes": 46000,
+      "minTrieEntries": 3300
     },
     {
       "category": "popUpAds",
@@ -244,7 +286,9 @@
       "file": "popupads.txt",
       "baseUrl": "adblock",
       "format": "adblock",
-      "displayName": "HaGeZi Pop-up Ads"
+      "displayName": "HaGeZi Pop-up Ads",
+      "minSizeBytes": 340000,
+      "minTrieEntries": 16000
     },
     {
       "category": "drugs",
@@ -252,7 +296,9 @@
       "file": "drugs-nl.txt",
       "baseUrl": "blocklistproject",
       "format": "domains",
-      "displayName": "Block List Project Drugs"
+      "displayName": "Block List Project Drugs",
+      "minSizeBytes": 160000,
+      "minTrieEntries": 8600
     }
   ],
   "build": {

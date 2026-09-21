@@ -382,3 +382,22 @@ fn the_issue_20_symptom_exactly_199_bytes() {
         }
     ));
 }
+
+#[test]
+fn every_configured_source_sets_both_floors() {
+    let config =
+        dns_blocklist_compiler::config::load_config(std::path::Path::new("blocklist-sources.json"))
+            .expect("the shipped config must load");
+    for source in &config.sources {
+        assert!(
+            source.min_size_bytes.unwrap_or(0) > 0,
+            "{} has no minSizeBytes",
+            source.display_name
+        );
+        assert!(
+            source.min_trie_entries.unwrap_or(0) > 0,
+            "{} has no minTrieEntries",
+            source.display_name
+        );
+    }
+}
