@@ -457,6 +457,36 @@ fn the_report_omits_the_degraded_section_when_nothing_degraded() {
 }
 
 #[test]
+fn every_configured_source_has_a_unique_display_name_and_category_index() {
+    // displayName is the baseline's primary key (src/counts.rs) and
+    // categoryIndex selects the bit each per-bit floor is checked against
+    // (validator::validate_output). Two sources sharing either would each be
+    // satisfied by the other's entries, and neither guard would ever fire.
+    let config =
+        dns_blocklist_compiler::config::load_config(std::path::Path::new("blocklist-sources.json"))
+            .expect("the shipped config must load");
+
+    let mut seen_names = std::collections::HashSet::new();
+    for source in &config.sources {
+        assert!(
+            seen_names.insert(source.display_name.clone()),
+            "duplicate displayName: {}",
+            source.display_name
+        );
+    }
+
+    let mut seen_indices = std::collections::HashSet::new();
+    for source in &config.sources {
+        assert!(
+            seen_indices.insert(source.category_index),
+            "duplicate categoryIndex {} on {}",
+            source.category_index,
+            source.display_name
+        );
+    }
+}
+
+#[test]
 fn every_configured_source_sets_both_floors() {
     let config =
         dns_blocklist_compiler::config::load_config(std::path::Path::new("blocklist-sources.json"))
