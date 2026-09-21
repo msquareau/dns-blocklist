@@ -215,6 +215,11 @@ fn main() {
         println!("Degraded ({}):", degraded.len());
         for e in &degraded {
             println!("  - {e}");
+            // A degraded run exits 0, so the Actions job shows the same green
+            // check as a clean run; the only other record is inside
+            // validation-report.txt. A workflow annotation surfaces it in the
+            // Actions UI without changing the exit code. Harmless outside CI.
+            eprintln!("::warning::{e}");
         }
     }
     let total_source_failures = total_failed + parse_failures.len();
