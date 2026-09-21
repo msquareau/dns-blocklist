@@ -1,8 +1,10 @@
 //! SDBL v3 binary reader. Used at build time for round-trip validation
-//! (canary lookups, sample re-checks, per-bit category counts). The
-//! runtime reader in alpaca-doh-server is the canonical consumer; this
-//! file mirrors enough of its parsing logic to spot a regression before
-//! the artifact ships.
+//! (canary lookups, sample re-checks, per-bit category counts).
+//!
+//! This module shares no code with the writer in `binary.rs`. It parses the
+//! format from the bytes alone, so a serialization regression shows up here
+//! before the artifact ships. A reader built on the writer's own helpers
+//! would agree with a bug instead of catching it.
 
 const MAGIC: u32 = 0x5344424C;
 const VERSION: u32 = 3;
