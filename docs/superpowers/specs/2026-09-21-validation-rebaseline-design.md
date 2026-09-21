@@ -147,19 +147,33 @@ still loads.
 ### 4.3 The baseline
 
 A new module `src/counts.rs` owns the file `build/cache/source-counts.json`, a
-`BTreeMap<String, usize>` keyed by `displayName`.
+`BTreeMap<String, SourceBaseline>` keyed by `displayName`.
 
 ```rust
-/// A missing or unreadable baseline reads as empty on purpose. The baseline
-/// exists to raise a warning. It must never fail a build of its own accord.
-pub fn read(path: &Path) -> BTreeMap<String, usize>;
+pub struct SourceBaseline {
+    pub parsed: usize,
+    pub declared_count_seen: bool,
+}
+
+pub type Baseline = BTreeMap<String, SourceBaseline>;
+
+/// A missing, unreadable, or wrong-shaped baseline reads as empty on
+/// purpose. The baseline exists to raise a warning. It must never fail a
+/// build of its own accord.
+pub fn read(path: &Path) -> Baseline;
 
 /// A write error prints a warning and returns. It never aborts the run.
-pub fn write(path: &Path, counts: &BTreeMap<String, usize>);
+pub fn write(path: &Path, counts: &Baseline);
 ```
 
+`parsed` alone cannot prove a header was ever declared: `main` writes it for every source that
+downloads and parses, header or no header. `declared_count_seen` is the fact that actually answers
+that question, and it is what `check_missing_declared_count` gates on — see §4.5.
+
 Both directions fail open. The first run after this change finds no baseline, raises nothing, and
-writes one.
+writes one. A baseline written by the pre-rebaseline module — a bare `BTreeMap<String, usize>` — is
+a different shape than `SourceBaseline` expects, so `read` returns it as empty rather than erroring:
+one silent run, then a rewrite in the current format.
 
 ### 4.4 The check
 
@@ -183,6 +197,24 @@ The baseline is rewritten from this run's counts only after Layer 3 passes, not 
 compilation finishes — the same safety property §8 relies on to save the CI cache unconditionally. A
 run that fails Layer 3 leaves the baseline untouched, so the same fall re-reports every day until the
 artifact defect is fixed; a clean run then rewrites it, and the fall reports exactly once from there.
+
+### 4.5 The missing-declared-count guard
+
+```rust
+pub fn check_missing_declared_count(
+    source: &SourceEntry,
+    expected: Option<usize>,
+    previous: Option<&SourceBaseline>,
+) -> Option<ValidationError>;
+```
+
+It fires only when a count was declared last run and none is declared this run:
+`expected.is_none() && previous.is_some_and(|b| b.declared_count_seen)`. A source with no header by
+design carries `declared_count_seen: false` from its first run onward, so it never satisfies that
+condition — it stays silent forever, not just on the run that first records it.
+
+`check_parse_degraded` runs this guard only after `check_parse_drop` finds nothing, so a source whose
+parse falls and whose header vanishes in the same run reports once, as a `ParsedDrop`, not twice.
 
 ## 5. Layer 2 — fix the header extractor
 

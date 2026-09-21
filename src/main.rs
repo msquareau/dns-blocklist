@@ -4,10 +4,10 @@ use dns_blocklist_compiler::run::{ReportInputs, RunStatus, build_validation_repo
 use dns_blocklist_compiler::validator::{self, ValidationError};
 use dns_blocklist_compiler::{binary, config, downloader, metadata, parser, reader};
 
+use dns_blocklist_compiler::counts::{Baseline, SourceBaseline};
 use flate2::Compression;
 use flate2::write::GzEncoder;
 use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -87,9 +87,10 @@ fn main() {
     println!("Loaded {} blocklist sources", config.sources.len());
     println!();
 
-    // The previous run's parsed count per source. A missing file reads as
-    // empty, which raises nothing — a first run and an evicted cache behave
-    // the same as a run whose counts all held steady.
+    // The previous run's baseline per source: its parsed count, and whether
+    // a declared entry count was actually seen for it. A missing file reads
+    // as empty, which raises nothing — a first run and an evicted cache
+    // behave the same as a run whose counts all held steady.
     let baseline_path = cache_dir.join("source-counts.json");
     let previous_counts = counts::read(&baseline_path);
     println!(
@@ -112,7 +113,7 @@ fn main() {
 
     let mut parse_failures: Vec<ValidationError> = Vec::new();
     let mut degraded: Vec<ValidationError> = Vec::new();
-    let mut current_counts: BTreeMap<String, usize> = BTreeMap::new();
+    let mut current_counts: Baseline = Baseline::new();
 
     for result in &results {
         match &result.outcome {
@@ -127,25 +128,27 @@ fn main() {
                     &mut store,
                 );
                 let parsed_total = exact_lines + wildcard_lines;
-                current_counts.insert(result.source.display_name.clone(), parsed_total);
-                // Both checks below are degraded-only: they flag a source for a
-                // person to look at without failing the run. `source_degraded`
-                // captures the verdict once, here, rather than having the
-                // report line re-scan `degraded` by source name below.
+                current_counts.insert(
+                    result.source.display_name.clone(),
+                    SourceBaseline {
+                        parsed: parsed_total,
+                        declared_count_seen: expected.is_some(),
+                    },
+                );
+                // Degraded-only: this flags a source for a person to look at
+                // without failing the run. `check_parse_degraded` runs both
+                // guards and returns at most one error, so a source whose
+                // parse falls and whose header vanishes in the same run is
+                // reported once, not twice. `source_degraded` captures the
+                // verdict here rather than having the report line re-scan
+                // `degraded` by source name below.
                 let mut source_degraded = false;
-                if let Some(e) = validator::check_parse_drop(
+                if let Some(e) = validator::check_parse_degraded(
                     &result.source,
                     parsed_total,
-                    previous_counts.get(&result.source.display_name).copied(),
-                    config.build.max_parsed_drop_ratio,
-                ) {
-                    source_degraded = true;
-                    degraded.push(e);
-                }
-                if let Some(e) = validator::check_missing_declared_count(
-                    &result.source,
                     expected,
-                    previous_counts.get(&result.source.display_name).copied(),
+                    previous_counts.get(&result.source.display_name),
+                    config.build.max_parsed_drop_ratio,
                 ) {
                     source_degraded = true;
                     degraded.push(e);

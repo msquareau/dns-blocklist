@@ -415,6 +415,39 @@ fn a_70_percent_parse_drop_leaves_the_run_status_at_exit_code_zero() {
 }
 
 #[test]
+fn a_source_that_drops_and_loses_its_header_together_stays_at_exit_code_zero_with_one_entry() {
+    use dns_blocklist_compiler::counts::SourceBaseline;
+
+    let src = source_with_floors("domains", None);
+    let baseline = SourceBaseline {
+        parsed: 100_000,
+        declared_count_seen: true,
+    };
+    let mut degraded: Vec<ValidationError> = Vec::new();
+    // Both check_parse_drop and check_missing_declared_count would fire
+    // independently on this input (a 70% fall, and no count declared this
+    // run against a baseline that had one) — check_parse_degraded must
+    // still record only one entry, and it must never reach the failure list.
+    if let Some(e) = validator::check_parse_degraded(&src, 30_000, None, Some(&baseline), 0.6) {
+        degraded.push(e);
+    }
+    assert_eq!(
+        degraded.len(),
+        1,
+        "a simultaneous drop and header loss must report as one degraded entry, not two"
+    );
+    assert!(matches!(degraded[0], ValidationError::ParsedDrop { .. }));
+
+    let status = if degraded.is_empty() {
+        RunStatus::Ok
+    } else {
+        RunStatus::Degraded
+    };
+    assert_eq!(status, RunStatus::Degraded);
+    assert_eq!(status.exit_code(), 0);
+}
+
+#[test]
 fn the_report_shows_a_degraded_section_when_something_degraded() {
     let store = DomainStore::new();
     let degraded = vec![ValidationError::ParsedDrop {
