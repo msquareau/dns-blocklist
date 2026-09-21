@@ -38,6 +38,11 @@ pub enum ValidationError {
         parsed: usize,
         min: usize,
     },
+    ParsedDrop {
+        source: String,
+        parsed: usize,
+        previous: usize,
+    },
     CanaryMissing {
         domain: String,
         want: u32,
@@ -102,6 +107,17 @@ impl fmt::Display for ValidationError {
                 min,
             } => {
                 write!(f, "{source}: parsed {parsed} below the minimum of {min}")
+            }
+            Self::ParsedDrop {
+                source,
+                parsed,
+                previous,
+            } => {
+                let fell = (1.0 - (*parsed as f64 / *previous as f64)) * 100.0;
+                write!(
+                    f,
+                    "{source}: parsed {parsed} lines, {fell:.1}% below the previous run's {previous}"
+                )
             }
             Self::CanaryMissing { domain, want, got } => {
                 write!(
@@ -355,6 +371,35 @@ pub fn validate_parse(
     Ok(())
 }
 
+/// Compare this run's parsed count with the previous run's.
+///
+/// This looks for partial corruption, not shrinkage. A source's count
+/// ordinarily grows, with an occasional upstream cleanup that reduces it.
+/// Neither is a fault, so `max_drop_ratio` sits far above a normal
+/// consolidation. What it catches is the one shape the other guards miss: a
+/// payload large enough to clear `min_size_bytes` that parses to a fraction of
+/// what it did, while its category still clears `min_trie_entries`.
+///
+/// The caller records the result as degraded, never as a failure. The baseline
+/// is rewritten from this run's counts, so one fall reports exactly once.
+pub fn check_parse_drop(
+    source: &SourceEntry,
+    parsed: usize,
+    previous: Option<usize>,
+    max_drop_ratio: f64,
+) -> Option<ValidationError> {
+    let previous = previous.filter(|p| *p > 0)?;
+    let fell = 1.0 - (parsed as f64 / previous as f64);
+    if fell > max_drop_ratio {
+        return Some(ValidationError::ParsedDrop {
+            source: source.display_name.clone(),
+            parsed,
+            previous,
+        });
+    }
+    None
+}
+
 pub fn validate_output_canary(
     domain: &str,
     expected_min_bitmap: u32,
@@ -488,5 +533,63 @@ mod tests {
         let s = e.to_string();
         assert!(s.contains("657403"));
         assert!(s.contains("Ultimate"));
+    }
+
+    #[test]
+    fn a_drop_past_the_ratio_is_reported() {
+        let src = fixture_source();
+        let err = check_parse_drop(&src, 30_000, Some(100_000), 0.6).unwrap();
+        assert!(matches!(
+            err,
+            ValidationError::ParsedDrop {
+                parsed: 30_000,
+                previous: 100_000,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn the_hagezi_light_trim_is_not_reported() {
+        // 2026-09-20 → 2026-09-21: 82665 → 65681, a fall of 20.5%.
+        let src = fixture_source();
+        assert!(check_parse_drop(&src, 65_681, Some(82_665), 0.6).is_none());
+    }
+
+    #[test]
+    fn a_drop_exactly_at_the_ratio_is_not_reported() {
+        let src = fixture_source();
+        assert!(check_parse_drop(&src, 40_000, Some(100_000), 0.6).is_none());
+    }
+
+    #[test]
+    fn growth_is_not_reported() {
+        let src = fixture_source();
+        assert!(check_parse_drop(&src, 200_000, Some(100_000), 0.6).is_none());
+    }
+
+    #[test]
+    fn an_absent_baseline_is_not_reported() {
+        let src = fixture_source();
+        assert!(check_parse_drop(&src, 1, None, 0.6).is_none());
+    }
+
+    #[test]
+    fn a_zero_baseline_is_not_reported() {
+        let src = fixture_source();
+        assert!(check_parse_drop(&src, 0, Some(0), 0.6).is_none());
+    }
+
+    #[test]
+    fn parsed_drop_display_reports_the_percentage() {
+        let e = ValidationError::ParsedDrop {
+            source: "Test Source".into(),
+            parsed: 30_000,
+            previous: 100_000,
+        };
+        assert_eq!(
+            e.to_string(),
+            "Test Source: parsed 30000 lines, 70.0% below the previous run's 100000"
+        );
     }
 }
