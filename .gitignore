@@ -16,6 +16,7 @@ Thumbs.db
 
 # Build output
 /output/
+/build/
 *.bin
 *.bin.gz
 
