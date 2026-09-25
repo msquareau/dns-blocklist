@@ -26,7 +26,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Restore source-count baseline
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: build/cache
           key: sources-v1-${{ github.run_id }}
@@ -61,7 +61,7 @@ jobs:
 
       - name: Save source-count baseline
         if: always()
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: build/cache
           key: sources-v1-${{ github.run_id }}
